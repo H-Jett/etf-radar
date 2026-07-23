@@ -53,22 +53,48 @@ function renderStatus(s){
   const L=s.latest;
   const MAP={ok:['✅','当天采集正常','ok'],warning:['⚠️','采集有警告','warn'],error:['❌','采集异常','err']};
   const [icon,label,cls]=MAP[L.status]||MAP.ok;
-  // 最近若干次运行的小方块,一眼看出连续是否正常
   const dots=(s.recent||[]).slice(0,16).map(r=>{
     const c=(MAP[r.status]||MAP.ok)[2];
     return `<i class="rs-dot ${c}" title="${r.run_at} · ${(MAP[r.status]||MAP.ok)[1]} · ${r.mode==='init'?'初始化':'每日'}"></i>`;
   }).join('');
-  // 简要:只显示时间、行情日;异常/警告时补一行原因
-  const note=(L.errors&&L.errors[0])||(L.warnings&&L.warnings[0])||'';
+  // 展开详情:关键指标 + 完整警告/错误 + 最近运行记录(供针对性排查)
+  const st=L.stats||{};
+  const facts=[
+    `模式 ${L.mode==='init'?'初始化(全量)':'每日增量'}`,
+    L.num_nt_etfs!=null?`国家队 ETF ${L.num_nt_etfs} 只`:'',
+    L.num_industries!=null?`行业 ${L.num_industries} 个`:'',
+    st.price_total?`收盘价覆盖 ${st.price_ok}/${st.price_total}`:'',
+    st.share_days_added!=null?`份额新增 ${st.share_days_added} 天`:'',
+    st.sse_etfs!=null?`沪深接口 ${st.sse_etfs}/${st.szse_etfs}`:'',
+    L.report_rescan?'本次重扫持有人':'',
+    st.no_new_trading_day?'非交易日·份额未变':'',
+    L.duration_sec!=null?`用时 ${L.duration_sec}s`:'',
+  ].filter(Boolean);
+  const msgs=[...(L.errors||[]).map(m=>`<li class="err">✕ ${m}</li>`),
+              ...(L.warnings||[]).map(m=>`<li class="warn">! ${m}</li>`)].join('');
+  const recent=(s.recent||[]).map(r=>{
+    const c=MAP[r.status]||MAP.ok;
+    const bad=(r.errors&&r.errors[0])||(r.warnings&&r.warnings[0])||'';
+    return `<tr><td class="muted">${r.run_at}</td><td class="rs-${c[2]}">${c[0]} ${c[1]}</td>`+
+      `<td>${r.mode==='init'?'初始化':'每日'}</td><td class="muted">${bad}</td></tr>`;
+  }).join('');
   el.className='run-status '+cls;
   el.innerHTML=
-    `<div class="rs-head">
+    `<div class="rs-head" id="rs-toggle">
        <span class="rs-icon">${icon}</span>
        <span class="rs-label">${label}</span>
        <span class="rs-time">最近采集 ${L.run_at} · 行情日 ${L.trade_date||'—'}</span>
        <span class="rs-dots" title="最近 ${(s.recent||[]).length} 次采集">${dots}</span>
-     </div>`+
-    (note?`<div class="rs-note">${note}</div>`:'');
+       <span class="rs-more">详情 ▾</span>
+     </div>
+     <div class="rs-detail" id="rs-detail" style="display:none">
+       <div class="rs-facts">${facts.map(f=>`<span>${f}</span>`).join('')}</div>
+       ${msgs?`<ul class="rs-msgs">${msgs}</ul>`:'<div class="muted" style="font-size:12.5px">本次无警告/错误</div>'}
+       <div class="rs-recent-title">最近运行记录</div>
+       <div class="table-scroll"><table class="rs-recent"><tbody>${recent}</tbody></table></div>
+     </div>`;
+  const tog=document.getElementById('rs-toggle'), det=document.getElementById('rs-detail'), more=el.querySelector('.rs-more');
+  tog.onclick=()=>{const open=det.style.display==='none';det.style.display=open?'':'none';more.textContent=open?'收起 ▴':'详情 ▾';};
 }
 
 function renderMeta(m){

@@ -51,9 +51,18 @@ main.wrap{padding-top:22px;padding-bottom:60px}
 .rs-dots{margin-left:auto;display:flex;gap:3px;align-items:center}
 .rs-dot{width:9px;height:9px;border-radius:2px;background:var(--muted);display:inline-block}
 .rs-dot.ok{background:var(--down)} .rs-dot.warn{background:var(--gold)} .rs-dot.err{background:var(--brand)}
-.rs-note{margin-top:7px;font-size:12.5px;color:var(--muted)}
-.run-status.err .rs-note{color:var(--brand)}
-.run-status.warn .rs-note{color:var(--gold)}
+.rs-head{cursor:pointer}
+.rs-more{color:var(--accent);font-size:12px;font-weight:600;white-space:nowrap}
+.rs-detail{margin-top:10px;padding-top:10px;border-top:1px dashed var(--line)}
+.rs-facts{display:flex;gap:7px 14px;flex-wrap:wrap;font-size:12.5px;color:var(--ink)}
+.rs-facts span{background:#f3f5f9;padding:2px 9px;border-radius:12px}
+.rs-msgs{margin:10px 0 2px;padding-left:2px;list-style:none;font-size:12.5px}
+.rs-msgs li{padding:2px 0}
+.rs-msgs .warn{color:var(--gold)} .rs-msgs .err{color:var(--brand);font-weight:600}
+.rs-recent-title{margin:12px 0 6px;font-size:12.5px;font-weight:600;color:var(--muted)}
+.rs-recent{width:100%;border-collapse:collapse;font-size:12px}
+.rs-recent td{padding:4px 8px;border-bottom:1px solid #eef1f6;white-space:nowrap}
+.rs-ok{color:var(--down)} .rs-warn{color:var(--gold)} .rs-err{color:var(--brand)}
 
 /* 统计卡 */
 .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:20px}

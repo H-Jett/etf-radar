@@ -486,7 +486,7 @@ def backfill_share_history(etfs, trade_date, start_date):
 # ==================================================================
 # 5b. 历史报告期国家队持仓（半年一个点，供持仓比例/份额走势）
 # ==================================================================
-def build_holder_periods(etfs, master):
+def build_holder_periods(etfs):
     """
     爬每只国家队 ETF 的所有历史报告期十大持有人，按行业聚合成半年序列。
     产出 {periods:[...], industries:{ind:{nt_amount,nt_ratio,report_share,num_etfs}}}。
@@ -514,6 +514,7 @@ def build_holder_periods(etfs, master):
             time.sleep(random.uniform(0, C.SCAN_DELAY))
         return code, out
 
+    name_of = {r["code"]: r["name"] for r in etfs}
     done = 0
     with ThreadPoolExecutor(max_workers=C.SCAN_WORKERS) as ex:
         futs = {ex.submit(one, c): c for c in codes}
@@ -524,36 +525,52 @@ def build_holder_periods(etfs, master):
             if done % 20 == 0 or done == len(codes):
                 log.info("  报告期进度 %d/%d", done, len(codes))
 
-    all_periods = sorted({p for m in per_code.values() for p in m})
-    ind_series = {}
+    # ① 持久化每只 ETF 各报告期持仓到 holders/etf/<code>.json（永久留存，
+    #    即使日后退出国家队也不删 → 支撑“点位准确”聚合）
+    os.makedirs(C.HOLDERS_ETF_DIR, exist_ok=True)
     for code, per in per_code.items():
-        ind = ind_of.get(code, "其他主题")
-        b = ind_series.setdefault(ind, {p: [0.0, 0.0, 0] for p in all_periods})
-        for p, (amt, rat, rshare) in per.items():
-            b[p][0] += amt            # Σ 国家队份额
-            b[p][1] += rat * amt      # 份额加权占比分子
-            b[p][2] += 1              # ETF 计数（此处借第3位暂存，稍后重算）
-    # 需要 report_share 汇总来算加权占比分母；重扫一遍
-    ind_rshare = {}
-    for code, per in per_code.items():
-        ind = ind_of.get(code, "其他主题")
-        b = ind_rshare.setdefault(ind, {p: 0.0 for p in all_periods})
-        for p, (amt, rat, rshare) in per.items():
-            b[p] += rshare
+        if not per:
+            continue
+        write_json(os.path.join(C.HOLDERS_ETF_DIR, f"{code}.json"), {
+            "code": code, "name": name_of.get(code, ""),
+            "industry": ind_of.get(code, "其他主题"),
+            "periods": {d: [round(a), round(rt, 2), round(rs)]
+                        for d, (a, rt, rs) in per.items()},
+        }, quiet=True)
 
+    # ② 从**所有**已持久化记录（在册 + 已退出）做点位准确聚合：
+    #    每一期只计入“当期确实持有国家队”的 ETF（其记录里含该期即算持有）
+    from collections import defaultdict
+    agg = defaultdict(lambda: defaultdict(lambda: [0.0, 0.0, 0]))  # ind->period->[amt,rshare,cnt]
+    all_periods = set()
+    if os.path.isdir(C.HOLDERS_ETF_DIR):
+        for fn in os.listdir(C.HOLDERS_ETF_DIR):
+            if not fn.endswith(".json"):
+                continue
+            rec = read_json(os.path.join(C.HOLDERS_ETF_DIR, fn), {}) or {}
+            ind = rec.get("industry", "其他主题")
+            for d, vals in rec.get("periods", {}).items():
+                amt, _rat, rshare = vals
+                all_periods.add(d)
+                cell = agg[ind][d]
+                cell[0] += amt; cell[1] += rshare; cell[2] += 1
+
+    periods = sorted(all_periods)
     industries = {}
-    for ind, b in ind_series.items():
+    for ind, pmap in agg.items():
         nt_amount, nt_ratio, num = [], [], []
-        for p in all_periods:
-            amt = b[p][0]
-            rshare = ind_rshare[ind][p]
-            nt_amount.append(round(amt) if amt else None)
-            nt_ratio.append(round(amt / rshare * 100, 2) if rshare else None)
-            num.append(b[p][2] or None)
+        for p in periods:
+            if p in pmap:
+                amt, rshare, cnt = pmap[p]
+                nt_amount.append(round(amt) if amt else None)
+                nt_ratio.append(round(amt / rshare * 100, 2) if rshare else None)
+                num.append(cnt or None)
+            else:
+                nt_amount.append(None); nt_ratio.append(None); num.append(None)
         industries[ind] = {"nt_amount": nt_amount, "nt_ratio": nt_ratio,
                            "num_etfs": num}
-    log.info("历史报告期聚合完成：%d 期 × %d 行业", len(all_periods), len(industries))
-    return {"periods": all_periods, "industries": industries}
+    log.info("历史报告期聚合(点位准确,含已退出):%d 期 × %d 行业", len(periods), len(industries))
+    return {"periods": periods, "industries": industries}
 
 
 # ==================================================================
@@ -761,7 +778,7 @@ def run_init(start_date=None, no_holder_history=False):
 
     price_series = collect_prices(etfs, beg=beg)
     share_hist = backfill_share_history(etfs, trade_date, start_date)
-    holder_periods = None if no_holder_history else build_holder_periods(etfs, master)
+    holder_periods = None if no_holder_history else build_holder_periods(etfs)
 
     industries = aggregate_industries(etfs)
     _write_all(trade_date, etfs, industries, price_series, share_hist, holder_periods)
