@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>个股总览 · 行业国家队看板</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🐰</text></svg>">
+<link rel="stylesheet" href="css/style.css">
+<script src="js/vendor/echarts.min.js"></script>
+</head>
+<body>
+<header class="topbar">
+  <div class="wrap">
+    <h1>🇨🇳 行业国家队 ETF 看板</h1>
+    <p class="sub">按行业追踪 <b>中央汇金 · 汇金资管 · 社保基金 · 证金公司</b> 持有的 ETF 与份额</p>
+    <nav class="nav">
+      <a href="index.html">总览</a><a href="trends.html">ETF走势</a><a href="detail.html">ETF详情</a>
+      <a href="stock.html" class="on">个股总览</a><a href="stock_trends.html">个股走势</a><a href="stock_detail.html">个股详情</a>
+      <a href="logs.html">日志</a>
+    </nav>
+    <div id="meta" class="meta"></div>
+  </div>
+</header>
+
+<main class="wrap">
+  <section id="stats" class="stats"></section>
+  <section class="charts">
+    <div class="card"><h2>各行业国家队持股市值</h2><div id="chart-industry" class="chart"></div></div>
+    <div class="card"><h2>国家队机构分布</h2><div id="chart-group" class="chart"></div></div>
+  </section>
+  <section class="card">
+    <div class="table-head"><h2>行业排行</h2><span class="hint"></span></div>
+    <div class="table-scroll">
+      <table id="industry-table">
+        <thead><tr>
+          <th class="ta-l">行业</th><th data-sort="num_stocks">个股数</th>
+          <th data-sort="mv" class="active desc">国家队持股市值</th>
+          <th data-sort="ratio">平均持股占比</th>
+          <th data-sort="mv_change">较上期市值变化</th>
+          <th class="ta-l">主要国家队机构</th>
+        </tr></thead><tbody></tbody>
+      </table>
+    </div>
+  </section>
+  <footer class="disclaimer">
+    <p><b>数据说明：</b>「国家队直接持股」来自 A 股季报 / 年报的<b>十大流通股东</b>(命中中央汇金/汇金资管/社保/证金/梧桐树/国新/产业基金等)。
+    <b>季度披露、市值为报告期口径</b>;新季度季报陆续披露完整前不计入。一只股票可属多个行业，市值按<b>主行业</b>汇总(避免重复计入)。</p>
+    <p class="muted">数据源：东方财富。仅供研究参考，不构成投资建议。</p>
+  </footer>
+</main>
+<script src="js/util.js"></script>
+<script src="js/stock.js"></script>
+</body>
+</html>

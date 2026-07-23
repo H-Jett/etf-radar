@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>个股详情 · 行业国家队看板</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🐰</text></svg>">
+<link rel="stylesheet" href="css/style.css">
+<script src="js/vendor/echarts.min.js"></script>
+</head>
+<body>
+<header class="topbar">
+  <div class="wrap">
+    <h1>🇨🇳 行业国家队 ETF 看板</h1>
+    <p class="sub">按行业追踪 <b>中央汇金 · 汇金资管 · 社保基金 · 证金公司</b> 持有的 ETF 与份额</p>
+    <nav class="nav">
+      <a href="index.html">总览</a><a href="trends.html">ETF走势</a><a href="detail.html">ETF详情</a>
+      <a href="stock.html">个股总览</a><a href="stock_trends.html">个股走势</a><a href="stock_detail.html" class="on">个股详情</a>
+      <a href="logs.html">日志</a>
+    </nav>
+  </div>
+</header>
+<main class="wrap">
+  <section class="card">
+    <div class="chart-toolbar">
+      <div class="tb-left"><label class="tb-label">行业</label><select id="ind-select" class="etf-select"></select></div>
+    </div>
+    <div id="ind-head" class="detail-head"></div>
+    <div class="line-tools"><button id="btn-all" class="mini">全选</button><button id="btn-none" class="mini">仅总量</button>
+      <span class="hint">该行业各成员个股「国家队持股市值」的报告期序列；点击图例显隐</span></div>
+    <div id="chart" class="chart" style="height:440px"></div>
+  </section>
+  <section class="card">
+    <div class="chart-toolbar">
+      <div class="tb-left"><label class="tb-label">选择个股</label><select id="holder-select" class="etf-select"></select></div>
+      <div class="tb-right"><span class="hint" id="stk-tags"></span></div>
+    </div>
+    <p class="muted" style="margin:0 2px 12px">下方为<b>所选个股</b>的国家队持有机构明细(报告期 <span id="rpt">—</span>)。</p>
+    <div class="table-scroll">
+      <table class="holder-table" id="nt-holders"><thead><tr>
+        <th class="ta-l">机构</th><th class="ta-l">类别</th><th>持股数(股)</th><th>持股占比</th><th>持股市值</th><th>较上期</th>
+      </tr></thead><tbody></tbody></table>
+    </div>
+  </section>
+  <footer class="disclaimer">
+    <p class="muted">季度口径。个股可属多个行业(详情页标签中<b>加粗</b>为主行业，市值按主行业汇总)。数据源：东方财富。仅供研究参考。</p>
+  </footer>
+</main>
+<script src="js/util.js"></script>
+<script src="js/stock_detail.js"></script>
+</body>
+</html>

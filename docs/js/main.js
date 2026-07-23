@@ -15,6 +15,8 @@ async function boot(){
     ]);
     INDUSTRIES=industries; META=meta;
     setIndustryOrder(meta.industry_order||[]);   // 供 colorOf 稳定取色
+    fetch('data/stock/meta.json').then(r=>r.json())
+      .then(sm=>renderOverviewCards(meta,sm)).catch(()=>renderOverviewCards(meta,null));
     const hint=document.querySelector('.table-head .hint');
     if(hint) hint.innerHTML=`持仓口径：报告期 <b>${meta.report_date||'—'}</b>（十大持有人半年披露一次）· 点击任意行展开成员 ETF`;
     renderMeta(meta); renderStats(meta,industries);
@@ -24,6 +26,28 @@ async function boot(){
   }catch(e){
     document.querySelector('main').innerHTML='<div class="loading">数据尚未生成，请先运行采集脚本或等待 GitHub Actions 首次运行。<br>'+e+'</div>';
   }
+}
+
+function renderOverviewCards(etf, stk){
+  const el=document.getElementById('ov-cards'); if(!el) return;
+  const etfCard=
+    `<a class="ov-card etf" href="trends.html">
+       <div class="ov-tag">ETF 渠道（间接持股）</div>
+       <div class="ov-mv">${yi(etf.total_nt_value)}<small>元</small></div>
+       <div class="ov-sub">国家队持有 ${etf.num_nt_etfs} 只 ETF · ${etf.num_industries} 行业 · 报告期 ${etf.report_date||'—'}</div>
+       <div class="ov-links"><span>ETF走势 ›</span></div>
+     </a>`;
+  const stkCard = stk ?
+    `<a class="ov-card stk" href="stock.html">
+       <div class="ov-tag">个股渠道（直接持股）</div>
+       <div class="ov-mv">${yi(stk.total_mv)}<small>元</small></div>
+       <div class="ov-sub">国家队重仓 ${stk.num_stocks} 只个股 · ${stk.num_industries} 行业 · 报告期 ${stk.report_date||'—'}</div>
+       <div class="ov-links"><span>个股总览 ›</span></div>
+     </a>`
+    : `<a class="ov-card stk" href="stock.html"><div class="ov-tag">个股渠道（直接持股）</div>
+       <div class="ov-mv muted" style="font-size:18px">数据生成中…</div>
+       <div class="ov-links"><span>个股总览 ›</span></div></a>`;
+  el.innerHTML=etfCard+stkCard;
 }
 
 function renderStatus(s){

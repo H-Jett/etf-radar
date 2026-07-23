@@ -14,7 +14,7 @@
   <div class="wrap">
     <h1>🇨🇳 行业国家队 ETF 看板</h1>
     <p class="sub">按行业追踪 <b>中央汇金 · 汇金资管 · 社保基金 · 证金公司</b> 持有的 ETF 与份额</p>
-    <nav class="nav"><a href="index.html" class="on">行业总览</a><a href="trends.html">行业走势</a><a href="detail.html">行业详情</a><a href="logs.html">采集日志</a></nav>
+    <nav class="nav"><a href="index.html" class="on">总览</a><a href="trends.html">ETF走势</a><a href="detail.html">ETF详情</a><a href="stock.html">个股总览</a><a href="stock_trends.html">个股走势</a><a href="stock_detail.html">个股详情</a><a href="logs.html">日志</a></nav>
     <div id="meta" class="meta"></div>
   </div>
 </header>
@@ -22,6 +22,10 @@
 <main class="wrap">
   <!-- 当天采集状态 -->
   <section id="run-status"></section>
+
+  <!-- 板块总览:ETF + 个股 -->
+  <section id="ov-cards" class="ov-cards"></section>
+  <p class="ov-note muted">下方为 <b>ETF 渠道</b>(国家队通过 ETF 间接持股)行业排行；<b>个股直接持股</b>见 <a href="stock.html">个股总览</a>。两者为不同渠道、互不重复。</p>
 
   <!-- 统计卡 -->
   <section id="stats" class="stats"></section>

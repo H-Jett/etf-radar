@@ -178,6 +178,112 @@ def fetch_szse_shares_history(code, start, end):
 
 
 # ==================================================================
+# 个股：东方财富 datacenter —— 十大流通股东（按报告期批量）+ 所属行业
+# ==================================================================
+_EM_DC_URL = "https://datacenter.eastmoney.com/securities/api/data/get"
+_EM_DC_HEADERS = {"User-Agent": UA, "Referer": "https://data.eastmoney.com/"}
+
+
+def stock_secucode(code: str) -> str:
+    """600xxx→600xxx.SH；0/3xxxxx→xxxxxx.SZ。"""
+    return code + (".SH" if code.startswith("6") else ".SZ")
+
+
+def fetch_stock_holders_period(end_date: str, is_nt):
+    """
+    抓某报告期(end_date='YYYY-MM-DD')全市场十大流通股东，筛出国家队(is_nt 谓词)。
+    稳定排序 SECURITY_CODE 分页(ps=500)、按(代码,股东)去重。市值 HOLDER_MARKET_CAP 接口直给(元)。
+    返回 [{code,name,holder,num(股),ratio(占流通%),mv(市值元),change,ratio_chg,end_date}...]。
+    """
+    seen = set()
+    out = []
+    p = 1
+    pages = None
+    while True:
+        params = {
+            "type": "RPT_F10_EH_FREEHOLDERS",
+            "sty": "SECURITY_CODE,SECURITY_NAME_ABBR,HOLDER_NAME,HOLD_NUM,HOLD_RATIO,HOLDER_MARKET_CAP,HOLD_NUM_CHANGE,HOLD_RATIO_CHANGE,END_DATE",
+            "filter": f"(END_DATE='{end_date}')", "p": str(p), "ps": "500",
+            "st": "SECURITY_CODE", "sr": "1",
+            "source": "SELECT_SECU_DATA", "client": "WEB",
+        }
+        data = None
+        for attempt in range(1, MAX_RETRIES + 1):
+            try:
+                r = requests.get(_EM_DC_URL, params=params, headers=_EM_DC_HEADERS,
+                                 timeout=REQUEST_TIMEOUT)
+                j = r.json()
+                res = j.get("result") or {}
+                data = res.get("data") or []
+                if pages is None:
+                    pages = res.get("pages") or 1
+                break
+            except Exception:  # noqa
+                time.sleep(1.0 * attempt)
+        if data is None:
+            log.warning("个股股东第 %d 页(%s)多次失败，中止该期", p, end_date)
+            break
+        for x in data:
+            code = str(x.get("SECURITY_CODE", "")).strip()
+            holder = (x.get("HOLDER_NAME") or "").strip()
+            key = (code, holder)
+            if key in seen:
+                continue
+            seen.add(key)
+            if not is_nt(holder):
+                continue
+            def _f(v):
+                try:
+                    return float(v)
+                except (TypeError, ValueError):
+                    return 0.0
+            out.append({
+                "code": code, "name": (x.get("SECURITY_NAME_ABBR") or "").strip(),
+                "holder": holder, "num": _f(x.get("HOLD_NUM")),
+                "ratio": _f(x.get("HOLD_RATIO")),
+                "mv": _f(x.get("HOLDER_MARKET_CAP")),
+                "change": x.get("HOLD_NUM_CHANGE"),
+                "ratio_chg": x.get("HOLD_RATIO_CHANGE"),
+                "end_date": str(x.get("END_DATE", ""))[:10],
+            })
+        if p >= (pages or 1):
+            break
+        p += 1
+    return out
+
+
+def fetch_stock_industry(code: str):
+    """
+    个股所属行业(东财 BOARD_TYPE='行业' 层级)。返回 (primary, industries[])：
+    primary=一级行业(BOARD_LEVEL 最小)，industries=全部行业层级名(按级别排序)。
+    取不到返回 (None, [])。
+    """
+    params = {
+        "type": "RPT_F10_CORETHEME_BOARDTYPE",
+        "sty": "BOARD_NAME,BOARD_TYPE,BOARD_LEVEL,BOARD_RANK",
+        "filter": f'(SECUCODE="{stock_secucode(code)}")',
+        "p": "1", "ps": "50", "source": "HSF10", "client": "PC",
+    }
+    for attempt in range(1, MAX_RETRIES + 1):
+        try:
+            r = requests.get(_EM_DC_URL, params=params, headers=_EM_DC_HEADERS,
+                             timeout=REQUEST_TIMEOUT)
+            rows = ((r.json() or {}).get("result") or {}).get("data") or []
+            break
+        except Exception:  # noqa
+            time.sleep(0.8 * attempt)
+            rows = None
+    if not rows:
+        return None, []
+    ind = [(int(x.get("BOARD_LEVEL") or 9), (x.get("BOARD_NAME") or "").strip())
+           for x in rows if x.get("BOARD_TYPE") == "行业" and x.get("BOARD_NAME")]
+    ind.sort()
+    industries = [n for _, n in ind]
+    primary = industries[0] if industries else None
+    return primary, industries
+
+
+# ==================================================================
 # 新浪 十大持有人
 # ==================================================================
 _RE_OPTION = re.compile(r'<option\s+value="([0-9]{4}-[0-9]{2}-[0-9]{2})"')

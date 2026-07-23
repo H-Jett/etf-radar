@@ -55,6 +55,8 @@ jobs:
             # 每日增量：脚本内部会自动检测新报告期，有则自动升级初始化
             python collector/daily.py
           fi
+          # 个股国家队直接持股(季度口径)：每日跑增量(只补最近报告期)，捕捉新季报
+          python collector/stock_daily.py || echo "个股采集失败(不阻断)"
 
       - name: 提交数据变更
         run: |

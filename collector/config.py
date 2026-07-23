@@ -21,6 +21,18 @@ RUNS_DIR = os.path.join(DATA_DIR, "runs")                  # runs/<YYYY-MM>.json
 LOG_DIR = os.path.join(BASE_DIR, "logs")
 
 # ------------------------------------------------------------------
+# 个股板块路径（docs/data/stock/ 下，镜像 ETF 结构）
+# ------------------------------------------------------------------
+STOCK_DATA_DIR = os.path.join(DATA_DIR, "stock")
+STOCK_SERIES_DIR = os.path.join(STOCK_DATA_DIR, "series")       # series/<code>/<year>.json 逐股逐年日频收盘价
+STOCK_TRENDS_DIR = os.path.join(STOCK_DATA_DIR, "trends")       # trends/<year>.json 各行业逐年日频持仓市值
+STOCK_HOLDERS_DIR = os.path.join(STOCK_DATA_DIR, "holders")     # holders/periods.json 报告期序列
+STOCK_HOLDERS_STK_DIR = os.path.join(STOCK_HOLDERS_DIR, "stock")  # holders/stock/<code>.json 每股分期持仓(永久留存)
+STOCK_INDUSTRY_DIR = os.path.join(STOCK_DATA_DIR, "industry")   # industry/<id>/<year>.json 行业内各股市值打包
+STOCK_INDUSTRY_CACHE = os.path.join(STOCK_DATA_DIR, "industry_map.json")  # 代码->行业 缓存(减少重复请求)
+STOCK_START_DATE = "2016-01-01"   # 个股历史起始(份额/收盘价/报告期回补)
+
+# ------------------------------------------------------------------
 # “国家队”识别关键词（命中十大持有人名称即视为国家队）
 #   —— 中央汇金 / 汇金资管 / 社保基金 / 证金公司（中国证券金融）
 # ------------------------------------------------------------------
@@ -50,6 +62,29 @@ def normalize_nt_group(name: str) -> str:
 
 def is_nt_holder(name: str) -> bool:
     return any(kw in name for kw in NT_KEYWORDS)
+
+
+# ------------------------------------------------------------------
+# 个股口径的国家队关键词/分组（比 ETF 更广：加 梧桐树/国新/国家集成电路 等）
+# ------------------------------------------------------------------
+STOCK_NT_KEYWORDS = NT_KEYWORDS + ["梧桐树", "国新投资", "中国国新", "国家集成电路"]
+
+STOCK_NT_GROUPS = NT_GROUPS + [
+    ("梧桐树", ["梧桐树"]),
+    ("国新投资", ["国新"]),
+    ("产业基金", ["国家集成电路"]),
+]
+
+
+def normalize_nt_group_stock(name: str) -> str:
+    for group, kws in STOCK_NT_GROUPS:
+        if any(kw in name for kw in kws):
+            return group
+    return ""
+
+
+def is_nt_holder_stock(name: str) -> bool:
+    return any(kw in name for kw in STOCK_NT_KEYWORDS)
 
 
 # ------------------------------------------------------------------
