@@ -115,6 +115,27 @@ def load_all_stock_records():
     return out
 
 
+def collect_top10(end_date):
+    """拉某期全市场十大流通股东(不筛国家队)，按股票分组、每股按占比降序取前 10。
+    返回 {code: [{holder,num,ratio,mv,is_nt,group}...]}。用于个股详情展示完整十大流通股东。"""
+    recs = S.fetch_stock_holders_period(end_date, lambda n: True)
+    by = defaultdict(list)
+    for r in recs:
+        by[r["code"]].append(r)
+    out = {}
+    for code, rs in by.items():
+        rs.sort(key=lambda x: -x["ratio"])
+        rows = []
+        for i, r in enumerate(rs[:10], 1):
+            nt = is_nt_holder_stock(r["holder"])
+            rows.append({"rank": i, "holder": r["holder"], "num": r["num"],
+                         "ratio": r["ratio"], "mv": r["mv"], "is_nt": nt,
+                         "group": normalize_nt_group_stock(r["holder"]) if nt else ""})
+        out[code] = rows
+    log.info("  十大流通股东：覆盖 %d 只个股(报告期 %s)", len(out), end_date)
+    return out
+
+
 def _aggregate_period(recs):
     """把一只股某期的国家队持有人记录聚合成 {mv,num,ratio,holders[]}。"""
     holders = []
@@ -171,16 +192,19 @@ def _valid_periods(store, periods):
     return [p for p in periods if pc.get(p, 0) >= MIN_PERIOD_STOCKS]
 
 
-def _write_all(store, cache, periods):
+def _write_all(store, cache, periods, fetch_top10=True):
     valid = _valid_periods(store, periods)
     if not valid:
         log.error("无成熟报告期(均未披露完整)，终止")
         return
     latest = valid[-1]
+    prev_period = valid[-2] if len(valid) >= 2 else None
     valid_set = set(valid)
-    log.info("成熟报告期 %d 个，最新快照期 = %s", len(valid), latest)
+    log.info("成熟报告期 %d 个，最新快照期 = %s（上一期 = %s）", len(valid), latest, prev_period)
     # 补行业(所有出现过的股都要,供点位聚合)
     cache = ensure_industries(list(store.keys()), cache)
+    # 完整十大流通股东（最新期，含非国家队；供个股详情展示）
+    top10 = collect_top10(latest) if fetch_top10 else {}
 
     # 持久化每股 + 组装 stocks/universe
     stocks = []
@@ -200,7 +224,7 @@ def _write_all(store, cache, periods):
             "mv": cur["mv"], "num": cur["num"], "ratio": cur["ratio"],
             "mv_prev": prev["mv"] if prev else None,
             "report_date": latest, "prev_report_date": pdates[-1] if pdates else None,
-            "holders": cur["holders"],
+            "holders": cur["holders"], "top10": top10.get(code, []),
         })
         universe.append({"code": code, "name": e["name"], "industry": primary,
                          "industries": industries})
@@ -211,7 +235,8 @@ def _write_all(store, cache, periods):
     for s in stocks:
         b = by_ind.setdefault(s["industry"], {"industry": s["industry"], "num_stocks": 0,
                                               "mv": 0.0, "mv_prev": 0.0, "_rw": 0.0,
-                                              "groups": {}, "stocks": [], "new_entries": 0})
+                                              "groups": {}, "_gd": {}, "stocks": [],
+                                              "new_entries": 0})
         b["num_stocks"] += 1
         b["mv"] += s["mv"]
         b["mv_prev"] += s["mv_prev"] or 0.0
@@ -221,6 +246,15 @@ def _write_all(store, cache, periods):
         for h in s["holders"]:
             g = h["group"] or "其他"
             b["groups"][g] = b["groups"].get(g, 0.0) + h["mv"]
+            cell = b["_gd"].setdefault(g, [0.0, 0.0, 0.0])  # [num, mv, mv_prev]
+            cell[0] += h["num"]; cell[1] += h["mv"]
+        # 上一报告期同机构市值(供"较上期")：读该股持久化的 prev_period 持有人
+        if prev_period:
+            pp = store.get(s["code"], {}).get("periods", {}).get(prev_period)
+            if pp:
+                for h in pp.get("holders", []):
+                    g = h.get("group") or "其他"
+                    b["_gd"].setdefault(g, [0.0, 0.0, 0.0])[2] += h.get("mv", 0)
         b["stocks"].append({"code": s["code"], "name": s["name"], "mv": s["mv"],
                             "ratio": s["ratio"], "is_new": s["mv_prev"] is None})
     industries = []
@@ -231,9 +265,52 @@ def _write_all(store, cache, periods):
         b["mv_change_pct"] = round(b["mv_change"] / b["mv_prev"], 4) if b["mv_prev"] else None
         b["stocks"].sort(key=lambda x: -x["mv"])
         b["groups"] = dict(sorted(b["groups"].items(), key=lambda kv: -kv[1]))
+        # group_detail：本行业各国家队机构 持股数/市值/上期市值/占本行业国家队市值比 + 较上期
+        gd = []
+        for g, (num, mv, mvp) in b.pop("_gd").items():
+            gd.append({"group": g, "num": round(num), "mv": round(mv),
+                       "mv_prev": round(mvp) if prev_period else None,
+                       "ratio": round(mv / b["mv"] * 100, 2) if b["mv"] else 0.0,
+                       "mv_change": round(mv - mvp) if prev_period else None})
+        gd.sort(key=lambda x: -x["mv"])
+        b["group_detail"] = gd
+        b["prev_report_date"] = prev_period
         b["order"] = INDUSTRY_ORDER.index(ind) if ind in INDUSTRY_ORDER else 999
         industries.append(b)
     industries.sort(key=lambda x: -x["mv"])
+
+    # 全局"国家队资金"统计：各资金(机构组) 总持仓市值/占比/覆盖个股数/较上期
+    gstats = {}
+    for s in stocks:
+        seen_g = set()
+        for h in s["holders"]:
+            g = h["group"] or "其他"
+            c = gstats.setdefault(g, {"group": g, "mv": 0.0, "num": 0.0,
+                                      "mv_prev": 0.0, "num_stocks": 0})
+            c["mv"] += h["mv"]; c["num"] += h["num"]
+            if g not in seen_g:
+                c["num_stocks"] += 1; seen_g.add(g)
+    if prev_period:
+        for code, e in store.items():
+            pp = e["periods"].get(prev_period)
+            if not pp:
+                continue
+            for h in pp.get("holders", []):
+                g = h.get("group") or "其他"
+                if g in gstats:
+                    gstats[g]["mv_prev"] += h.get("mv", 0)
+    total_mv0 = sum(s["mv"] for s in stocks) or 1
+    nt_group_stats = []
+    for g, c in gstats.items():
+        mv = round(c["mv"])
+        nt_group_stats.append({
+            "group": g, "mv": mv, "num": round(c["num"]),
+            "num_stocks": c["num_stocks"],
+            "ratio": round(c["mv"] / total_mv0 * 100, 2),
+            "mv_prev": round(c["mv_prev"]) if prev_period else None,
+            "mv_change": round(c["mv"] - c["mv_prev"]) if prev_period else None,
+        })
+    nt_group_stats.sort(key=lambda x: -x["mv"])
 
     # 报告期序列（点位准确：读全部持久化记录，每期按当期实际持有的股 + 其主行业聚合）
     hp = _build_holder_periods(cache, valid_set)
@@ -245,12 +322,14 @@ def _write_all(store, cache, periods):
     meta = {
         "generated_at": now_cn(),
         "report_date": latest,
+        "prev_report_date": prev_period,
         "num_stocks": len(stocks),
         "num_industries": len(industries),
         "total_mv": total_mv,
         "periods": hp["periods"],
         "industry_order": INDUSTRY_ORDER,
         "nt_groups": inst_groups,
+        "nt_group_stats": nt_group_stats,
         "nt_keywords": C.STOCK_NT_KEYWORDS,
     }
     write_json(os.path.join(C.STOCK_DATA_DIR, "meta.json"), meta)

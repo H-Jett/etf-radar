@@ -9,6 +9,8 @@ async function boot(){
   window.addEventListener('resize',()=>CHART.resize());
   bindSeg('metric-seg','m',v=>{METRIC=v; onMetric(); render();});
   bindSeg('period-seg','p',v=>{PERIOD=v; LS.period=v; render();});
+  document.getElementById('btn-all').onclick=()=>toggleAll(true);
+  document.getElementById('btn-none').onclick=()=>toggleAll(false);
   // 恢复已保存的周期按钮高亮
   document.querySelectorAll('#period-seg button').forEach(b=>
     b.classList.toggle('active', b.dataset.p===PERIOD));
@@ -109,8 +111,8 @@ function render(){
   const zEnd=z?z.end:100;
   CHART.setOption({
     animationDuration:400,
-    grid:{left:60,right:24,top:12,bottom:70},
-    legend:{type:'scroll',top:0,data:order,selected:LEGEND_SEL,textStyle:{fontSize:11}},
+    grid:{left:60,right:24,top:48,bottom:70},
+    legend:{type:'scroll',top:8,data:order,selected:LEGEND_SEL,textStyle:{fontSize:11}},
     tooltip:{trigger:'axis',
       formatter:ps=>{let s=ps[0].axisValue+'<br/>';
         ps.filter(p=>p.value!=null).sort((a,b)=>b.value-a.value).slice(0,12).forEach(p=>{
@@ -134,6 +136,12 @@ function render(){
   renderTable(D,order,colorFor);
 }
 
+function toggleAll(on){
+  if(!LEGEND_SEL) return;
+  Object.keys(LEGEND_SEL).forEach(k=>LEGEND_SEL[k]=on);
+  CHART.setOption({legend:{selected:LEGEND_SEL}});
+}
+
 function renderTable(D,order,colorFor){
   // 取最近 ~14 个时间桶为列（最新在右）
   const n=D.x.length, take=Math.min(14,n);
@@ -142,6 +150,14 @@ function renderTable(D,order,colorFor){
   thead.innerHTML='<tr><th class="ta-l">行业</th>'+
     cols.map(i=>`<th>${D.x[i]}</th>`).join('')+'<th>区间变化</th></tr>';
   const tb=document.querySelector('#trend-table tbody'); tb.innerHTML='';
+  // 汇总行：份额/份数可跨行业相加 → 合计；占比不可加 → 显示 —
+  if(METRIC!=='ratio'){
+    const sums=cols.map(i=>{let t=0,has=false;order.forEach(ind=>{const v=D.inds[ind][i];if(v!=null){t+=v;has=true;}});return has?t:null;});
+    const f=sums[0],l=sums[sums.length-1];
+    let chg='—'; if(f!=null&&l!=null&&f){const d=(l-f)/f*100;chg=`<span class="${d>0?'pos':(d<0?'neg':'')}">${d>0?'+':''}${d.toFixed(1)}%</span>`;}
+    tb.innerHTML+=`<tr class="total-row"><td class="ta-l"><b>合计（全部行业）</b></td>`+
+      sums.map(v=>`<td><b>${v==null?'—':yi(v)}</b></td>`).join('')+`<td><b>${chg}</b></td></tr>`;
+  }
   order.forEach(ind=>{
     const vals=D.inds[ind];
     const first=vals[cols[0]], last=vals[cols[cols.length-1]];

@@ -11,9 +11,9 @@
 <body>
 <header class="topbar">
   <div class="wrap">
-    <h1>🇨🇳 行业国家队 ETF 看板</h1>
+    <h1>🇨🇳 国家队持仓看板 · ETF</h1>
     <p class="sub">按行业追踪 <b>中央汇金 · 汇金资管 · 社保基金 · 证金公司</b> 持有的 ETF 与份额</p>
-    <nav class="nav"><a href="index.html">总览</a><a href="trends.html" class="on">ETF走势</a><a href="detail.html">ETF详情</a><a href="stock.html">个股总览</a><a href="stock_trends.html">个股走势</a><a href="stock_detail.html">个股详情</a><a href="logs.html">日志</a></nav>
+    <nav class="nav"><a href="index.html" class="home">🏠 总览</a><span class="seg-nav"><a href="etf.html" class="on">ETF</a><a href="stock.html">个股</a></span><span class="sub-nav"><a href="etf.html">总览</a><a href="trends.html" class="on">走势</a><a href="detail.html">详情</a></span><a href="logs.html">日志</a></nav>
   </div>
 </header>
 
@@ -35,9 +35,14 @@
         </div>
       </div>
     </div>
-    <p id="metric-note" class="muted" style="margin:0 2px 10px"></p>
-    <div id="chart" class="chart" style="height:440px"></div>
-    <p class="muted" style="margin:4px 2px 0">拖动底部滑块查看不同时段；点击图例可显示/隐藏行业。</p>
+    <p id="metric-note" class="muted" style="margin:0 2px 8px"></p>
+    <div class="line-tools">
+      <button id="btn-all" class="mini">全选</button>
+      <button id="btn-none" class="mini">全不选</button>
+      <span class="hint">点击图例可单独显示/隐藏某行业</span>
+    </div>
+    <div id="chart" class="chart" style="height:480px"></div>
+    <p class="muted" style="margin:6px 2px 0">拖动底部滑块查看不同时段。</p>
   </section>
 
   <section class="card">

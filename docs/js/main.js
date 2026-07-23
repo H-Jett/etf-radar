@@ -31,22 +31,22 @@ async function boot(){
 function renderOverviewCards(etf, stk){
   const el=document.getElementById('ov-cards'); if(!el) return;
   const etfCard=
-    `<a class="ov-card etf" href="trends.html">
+    `<a class="ov-card etf" href="etf.html">
        <div class="ov-tag">ETF 渠道（间接持股）</div>
        <div class="ov-mv">${yi(etf.total_nt_value)}<small>元</small></div>
        <div class="ov-sub">国家队持有 ${etf.num_nt_etfs} 只 ETF · ${etf.num_industries} 行业 · 报告期 ${etf.report_date||'—'}</div>
-       <div class="ov-links"><span>ETF走势 ›</span></div>
+       <div class="ov-links"><span>进入 ETF 板块 ›</span></div>
      </a>`;
   const stkCard = stk ?
     `<a class="ov-card stk" href="stock.html">
        <div class="ov-tag">个股渠道（直接持股）</div>
        <div class="ov-mv">${yi(stk.total_mv)}<small>元</small></div>
        <div class="ov-sub">国家队重仓 ${stk.num_stocks} 只个股 · ${stk.num_industries} 行业 · 报告期 ${stk.report_date||'—'}</div>
-       <div class="ov-links"><span>个股总览 ›</span></div>
+       <div class="ov-links"><span>进入 个股 板块 ›</span></div>
      </a>`
     : `<a class="ov-card stk" href="stock.html"><div class="ov-tag">个股渠道（直接持股）</div>
        <div class="ov-mv muted" style="font-size:18px">数据生成中…</div>
-       <div class="ov-links"><span>个股总览 ›</span></div></a>`;
+       <div class="ov-links"><span>进入 个股 板块 ›</span></div></a>`;
   el.innerHTML=etfCard+stkCard;
 }
 
@@ -108,6 +108,7 @@ function renderMeta(m){
 }
 
 function renderStats(m,inds){
+  if(!document.getElementById('stats')) return;
   const cards=[
     ['国家队 ETF 数量', m.num_nt_etfs, '只'],
     ['覆盖行业 / 主题', m.num_industries, '个'],
@@ -120,6 +121,7 @@ function renderStats(m,inds){
 }
 
 function renderIndustryChart(inds){
+  if(!document.getElementById('chart-industry')) return;
   const top=[...inds].sort((a,b)=>(b.nt_value||0)-(a.nt_value||0)).slice(0,14).reverse();
   const el=echarts.init(document.getElementById('chart-industry'));
   el.setOption({
@@ -136,6 +138,7 @@ function renderIndustryChart(inds){
 }
 
 function renderGroupChart(m,inds){
+  if(!document.getElementById('chart-group')) return;
   const g={};
   inds.forEach(b=>{for(const[k,v]of Object.entries(b.groups||{})) g[k]=(g[k]||0)+v;});
   const data=Object.entries(g).map(([k,v])=>({name:k,value:v})).sort((a,b)=>b.value-a.value);
@@ -164,11 +167,12 @@ function bindSort(){
 }
 
 function renderTable(){
+  const tb=document.querySelector('#industry-table tbody');
+  if(!tb) return;
   const rows=[...INDUSTRIES].sort((a,b)=>{
     const x=a[sortKey]??-Infinity,y=b[sortKey]??-Infinity;
     return sortDesc?(y-x):(x-y);
   });
-  const tb=document.querySelector('#industry-table tbody');
   tb.innerHTML='';
   rows.forEach(b=>{
     const groups=Object.entries(b.groups||{}).slice(0,3)

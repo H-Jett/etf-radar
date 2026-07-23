@@ -11,13 +11,9 @@
 <body>
 <header class="topbar">
   <div class="wrap">
-    <h1>🇨🇳 行业国家队 ETF 看板</h1>
-    <p class="sub">按行业追踪 <b>中央汇金 · 汇金资管 · 社保基金 · 证金公司</b> 持有的 ETF 与份额</p>
-    <nav class="nav">
-      <a href="index.html">总览</a><a href="trends.html">ETF走势</a><a href="detail.html">ETF详情</a>
-      <a href="stock.html">个股总览</a><a href="stock_trends.html">个股走势</a><a href="stock_detail.html" class="on">个股详情</a>
-      <a href="logs.html">日志</a>
-    </nav>
+    <h1>🇨🇳 国家队持仓看板 · 个股</h1>
+    <p class="sub">按行业追踪 <b>中央汇金 · 社保 · 证金 · 汇金资管 · 梧桐树 · 国新 · 大基金</b> 直接持有的个股</p>
+    <nav class="nav"><a href="index.html" class="home">🏠 总览</a><span class="seg-nav"><a href="etf.html">ETF</a><a href="stock.html" class="on">个股</a></span><span class="sub-nav"><a href="stock.html">总览</a><a href="stock_trends.html">走势</a><a href="stock_detail.html" class="on">详情</a></span><a href="logs.html">日志</a></nav>
   </div>
 </header>
 <main class="wrap">
@@ -26,19 +22,39 @@
       <div class="tb-left"><label class="tb-label">行业</label><select id="ind-select" class="etf-select"></select></div>
     </div>
     <div id="ind-head" class="detail-head"></div>
-    <div class="line-tools"><button id="btn-all" class="mini">全选</button><button id="btn-none" class="mini">仅总量</button>
+    <div class="line-tools"><button id="btn-all" class="mini">全选</button><button id="btn-none" class="mini">全不选</button><button id="btn-total" class="mini">仅总量</button>
       <span class="hint">该行业各成员个股「国家队持股市值」的报告期序列；点击图例显隐</span></div>
-    <div id="chart" class="chart" style="height:440px"></div>
+    <div id="chart" class="chart" style="height:480px"></div>
   </section>
+
+  <section class="card">
+    <div class="table-head"><h2>本行业国家队持仓（按资金）</h2>
+      <span class="hint">当前行业各路国家队资金的持仓及较上期变化（报告期 <span id="ig-rpt">—</span>）</span></div>
+    <div class="table-scroll">
+      <table class="holder-table" id="ind-groups"><thead><tr>
+        <th class="ta-l">资金（机构）</th><th class="ta-l">类别</th><th>持股数(股)</th><th>占本行业</th><th>持股市值</th><th>较上期</th>
+      </tr></thead><tbody></tbody></table>
+    </div>
+  </section>
+
   <section class="card">
     <div class="chart-toolbar">
       <div class="tb-left"><label class="tb-label">选择个股</label><select id="holder-select" class="etf-select"></select></div>
       <div class="tb-right"><span class="hint" id="stk-tags"></span></div>
     </div>
-    <p class="muted" style="margin:0 2px 12px">下方为<b>所选个股</b>的国家队持有机构明细(报告期 <span id="rpt">—</span>)。</p>
+    <p class="muted" style="margin:0 2px 12px">下方为<b>所选个股</b>的持有人明细(报告期 <span id="rpt">—</span>)。</p>
+
+    <h3 class="sub-h">国家队持有机构</h3>
     <div class="table-scroll">
       <table class="holder-table" id="nt-holders"><thead><tr>
         <th class="ta-l">机构</th><th class="ta-l">类别</th><th>持股数(股)</th><th>持股占比</th><th>持股市值</th><th>较上期</th>
+      </tr></thead><tbody></tbody></table>
+    </div>
+
+    <h3 class="sub-h">十大流通股东（完整）</h3>
+    <div class="table-scroll">
+      <table class="holder-table" id="all-holders"><thead><tr>
+        <th>排名</th><th class="ta-l">股东名称</th><th class="ta-l">类别</th><th>持股数(股)</th><th>占流通比</th><th>持股市值</th>
       </tr></thead><tbody></tbody></table>
     </div>
   </section>

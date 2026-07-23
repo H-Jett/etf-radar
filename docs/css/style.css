@@ -25,11 +25,24 @@ a:hover{text-decoration:underline}
 .topbar h1{margin:0;font-size:24px;letter-spacing:.5px}
 .topbar .sub{margin:6px 0 0;opacity:.92;font-size:14px}
 .topbar .sub b{font-weight:600}
-.nav{margin-top:14px;display:flex;gap:8px}
+.nav{margin-top:14px;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 .nav a{color:#fff;text-decoration:none;font-size:13.5px;font-weight:600;
   padding:6px 14px;border-radius:20px;background:rgba(255,255,255,.14);transition:background .12s}
-.nav a:hover{background:rgba(255,255,255,.26)}
+.nav a:hover{background:rgba(255,255,255,.26);text-decoration:none}
 .nav a.on{background:#fff;color:var(--brand)}
+/* 分段切换 ETF|个股 */
+.seg-nav{display:inline-flex;background:rgba(0,0,0,.16);border-radius:22px;padding:3px;gap:2px}
+.seg-nav a{background:transparent;padding:6px 20px;font-size:14px}
+.seg-nav a:hover{background:rgba(255,255,255,.18)}
+.seg-nav a.on{background:#fff;color:var(--brand);box-shadow:0 1px 3px rgba(0,0,0,.15)}
+/* 子标签(跟随板块) */
+.sub-nav{display:inline-flex;gap:4px}
+.sub-nav a{background:transparent;font-weight:500;font-size:13px;padding:6px 12px;opacity:.9}
+.sub-nav a:hover{background:rgba(255,255,255,.16)}
+.sub-nav a.on{background:rgba(255,255,255,.28);opacity:1}
+.nav a.home{background:rgba(255,255,255,.1)}
+.nav a.home.on{background:#fff;color:var(--brand)}
+.home-h{font-size:15px;color:var(--muted);margin:2px 2px 12px;font-weight:600}
 .meta{margin-top:12px;font-size:12.5px;opacity:.9;display:flex;gap:18px;flex-wrap:wrap}
 .meta span{background:rgba(255,255,255,.14);padding:3px 10px;border-radius:20px}
 
@@ -116,6 +129,9 @@ thead th.active::after{content:" ▾";color:var(--brand)}
 thead th.active.asc::after{content:" ▴"}
 tbody td{padding:11px 12px;text-align:right;border-bottom:1px solid var(--line);white-space:nowrap}
 tbody td.ta-l{text-align:left}
+tbody tr.total-row{background:#fbf3f4}
+tbody tr.total-row td{border-bottom:2px solid var(--line);color:var(--ink)}
+#trend-table tbody tr.total-row td:first-child{background:#fbf3f4}
 tbody tr.ind-row{cursor:pointer;transition:background .12s}
 tbody tr.ind-row:hover{background:#fafbfe}
 .ind-name{font-weight:600;display:flex;align-items:center;gap:8px}

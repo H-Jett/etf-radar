@@ -1,19 +1,22 @@
 /* ===== 个股详情：行业内成员股 持股市值(报告期)多线 + 个股持有机构明细 + 多行业标签 ===== */
 const qs=new URLSearchParams(location.search);
-let CHART, PERIODS=[], STOCKMAP={}, BYIND={}, CUR=null, PREFER=null, LEGEND=null;
+let CHART, PERIODS=[], STOCKMAP={}, BYIND={}, INDMAP={}, CUR=null, PREFER=null, LEGEND=null;
 const SERIESCACHE={};
 
 async function boot(){
   CHART=echarts.init(document.getElementById('chart'));
   window.addEventListener('resize',()=>CHART.resize());
-  document.getElementById('btn-all').onclick=()=>toggleAll(true);
-  document.getElementById('btn-none').onclick=()=>toggleAll(false);
+  document.getElementById('btn-all').onclick=()=>toggleAll('all');
+  document.getElementById('btn-none').onclick=()=>toggleAll('none');
+  document.getElementById('btn-total').onclick=()=>toggleAll('total');
   try{
-    const [meta,stocks,periods]=await Promise.all([
+    const [meta,stocks,periods,industries]=await Promise.all([
       fetch('data/stock/meta.json').then(r=>r.json()),
       fetch('data/stock/stocks.json').then(r=>r.json()),
       fetch('data/stock/holders/periods.json').then(r=>r.json()),
+      fetch('data/stock/industries.json').then(r=>r.json()),
     ]);
+    industries.forEach(b=>INDMAP[b.industry]=b);
     setIndustryOrder(meta.industry_order||[]);
     PERIODS=periods.periods||[];
     stocks.forEach(s=>{STOCKMAP[s.code]=s; (BYIND[s.industry]=BYIND[s.industry]||[]).push(s);});
@@ -47,7 +50,19 @@ async function loadIndustry(ind){
     series[s.code]=PERIODS.map(d=>per[d]?per[d].mv:null);
   }));
   CUR={ind, members, series};
-  renderHead(); renderChart(); buildHolderSelect();
+  renderHead(); renderChart(); renderIndGroups(ind); buildHolderSelect();
+}
+function renderIndGroups(ind){
+  const b=INDMAP[ind]; const tb=document.querySelector('#ind-groups tbody');
+  document.getElementById('ig-rpt').textContent=(b&&b.report_date)|| (STOCKMAP[CUR.members[0].code]||{}).report_date || '—';
+  if(!b||!b.group_detail){ tb.innerHTML='<tr><td colspan="6" class="muted">无</td></tr>'; return; }
+  const chgHtml=v=>v==null?'—':`<span class="${v>0?'pos':(v<0?'neg':'')}">${v>0?'+':''}${yi(v)}</span>`;
+  let rows=b.group_detail.map(g=>
+    `<tr class="nt-row"><td class="ta-l nt">${g.group}</td><td class="ta-l">${g.group}</td>`+
+    `<td>${yi(g.num)}</td><td>${pct(g.ratio)}</td><td>${yi(g.mv)}</td><td>${chgHtml(g.mv_change)}</td></tr>`).join('');
+  rows+=`<tr class="total-row"><td class="ta-l"><b>合计</b></td><td></td><td></td><td><b>100.00%</b></td>`+
+    `<td><b>${yi(b.mv)}</b></td><td><b>${chgHtml(b.mv_change)}</b></td></tr>`;
+  tb.innerHTML=rows;
 }
 function renderHead(){ document.getElementById('ind-head').innerHTML=`<b style="font-size:19px">${CUR.ind}</b>`; }
 function renderChart(){
@@ -70,7 +85,9 @@ function renderChart(){
     series},true);
   CHART.off('legendselectchanged'); CHART.on('legendselectchanged',p=>{LEGEND=p.selected;});
 }
-function toggleAll(on){ if(!LEGEND)return; Object.keys(LEGEND).forEach(k=>LEGEND[k]=on||k==='总量'); CHART.setOption({legend:{selected:LEGEND}}); }
+function toggleAll(mode){ if(!LEGEND)return;
+  Object.keys(LEGEND).forEach(k=>{ LEGEND[k]= mode==='all'?true : mode==='total'?(k==='总量') : false; });
+  CHART.setOption({legend:{selected:LEGEND}}); }
 function buildHolderSelect(){
   const sel=document.getElementById('holder-select');
   const opts=[...CUR.members].sort((a,b)=>b.mv-a.mv);
@@ -88,5 +105,12 @@ function renderHolders(code){
     `<tr class="nt-row"><td class="ta-l nt">${h.holder}</td><td class="ta-l">${h.group||'—'}</td>`+
     `<td>${yi(h.num)}</td><td>${pct(h.ratio)}</td><td>${yi(h.mv)}</td><td>${h.change||'—'}</td></tr>`
   ).join('')||'<tr><td colspan="6" class="muted">无</td></tr>';
+  // 十大流通股东（完整，标注国家队及所属资金）
+  document.querySelector('#all-holders tbody').innerHTML=(s.top10||[]).map(h=>
+    `<tr class="${h.is_nt?'nt-row':''}"><td>${h.rank}</td>`+
+    `<td class="ta-l ${h.is_nt?'nt':''}">${h.holder}${h.is_nt?' <span class="tag">国家队</span>':''}</td>`+
+    `<td class="ta-l">${h.is_nt?h.group:'—'}</td>`+
+    `<td>${yi(h.num)}</td><td>${pct(h.ratio)}</td><td>${yi(h.mv)}</td></tr>`
+  ).join('')||'<tr><td colspan="6" class="muted">无（该期未披露）</td></tr>';
 }
 boot();

@@ -12,7 +12,7 @@ async function boot(){
     if(hint) hint.innerHTML=`持仓口径：报告期 <b>${meta.report_date||'—'}</b>（十大流通股东季度披露）· 点击任意行展开成员个股`;
     document.getElementById('meta').innerHTML=
       `<span>更新时间：${meta.generated_at}</span><span>报告期：${meta.report_date||'—'}</span>`;
-    renderStats(meta); renderIndustryChart(); renderGroupChart(); renderTable(); bindSort();
+    renderStats(meta); renderFundStats(meta); renderIndustryChart(); renderGroupChart(); renderTable(); bindSort();
   }catch(e){
     document.querySelector('main').innerHTML='<div class="loading">个股数据尚未生成：'+e+'</div>';
   }
@@ -22,6 +22,17 @@ function renderStats(m){
     ['国家队持股总市值',yi(m.total_mv),''],['报告期',m.report_date||'—','']];
   document.getElementById('stats').innerHTML=cards.map(c=>
     `<div class="stat"><div class="k">${c[0]}</div><div class="v">${c[1]}<small>${c[2]}</small></div></div>`).join('');
+}
+function renderFundStats(m){
+  const tb=document.querySelector('#fund-table tbody'); if(!tb) return;
+  const el=document.getElementById('fund-rpt'); if(el) el.textContent=m.report_date||'—';
+  const gs=m.nt_group_stats||[];
+  const chg=v=>v==null?'—':`<span class="${v>0?'pos':(v<0?'neg':'')}">${v>0?'+':''}${yi(v)}</span>`;
+  tb.innerHTML=gs.map(g=>
+    `<tr class="nt-row"><td class="ta-l nt">${g.group}</td><td><b>${yi(g.mv)}</b></td>`+
+    `<td>${pct(g.ratio)}</td><td>${g.num_stocks} 只</td><td>${chg(g.mv_change)}</td></tr>`).join('')
+    +`<tr class="total-row"><td class="ta-l"><b>合计</b></td><td><b>${yi(m.total_mv)}</b></td>`+
+     `<td><b>100.00%</b></td><td></td><td></td></tr>`;
 }
 function renderIndustryChart(){
   const top=[...INDUSTRIES].sort((a,b)=>b.mv-a.mv).slice(0,14).reverse();

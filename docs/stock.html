@@ -11,13 +11,9 @@
 <body>
 <header class="topbar">
   <div class="wrap">
-    <h1>🇨🇳 行业国家队 ETF 看板</h1>
-    <p class="sub">按行业追踪 <b>中央汇金 · 汇金资管 · 社保基金 · 证金公司</b> 持有的 ETF 与份额</p>
-    <nav class="nav">
-      <a href="index.html">总览</a><a href="trends.html">ETF走势</a><a href="detail.html">ETF详情</a>
-      <a href="stock.html" class="on">个股总览</a><a href="stock_trends.html">个股走势</a><a href="stock_detail.html">个股详情</a>
-      <a href="logs.html">日志</a>
-    </nav>
+    <h1>🇨🇳 国家队持仓看板 · 个股</h1>
+    <p class="sub">按行业追踪 <b>中央汇金 · 社保 · 证金 · 汇金资管 · 梧桐树 · 国新 · 大基金</b> 直接持有的个股</p>
+    <nav class="nav"><a href="index.html" class="home">🏠 总览</a><span class="seg-nav"><a href="etf.html">ETF</a><a href="stock.html" class="on">个股</a></span><span class="sub-nav"><a href="stock.html" class="on">总览</a><a href="stock_trends.html">走势</a><a href="stock_detail.html">详情</a></span><a href="logs.html">日志</a></nav>
     <div id="meta" class="meta"></div>
   </div>
 </header>
@@ -26,7 +22,16 @@
   <section id="stats" class="stats"></section>
   <section class="charts">
     <div class="card"><h2>各行业国家队持股市值</h2><div id="chart-industry" class="chart"></div></div>
-    <div class="card"><h2>国家队机构分布</h2><div id="chart-group" class="chart"></div></div>
+    <div class="card"><h2>国家队机构（资金）分布</h2><div id="chart-group" class="chart"></div></div>
+  </section>
+  <section class="card">
+    <div class="table-head"><h2>国家队资金构成及变化</h2>
+      <span class="hint">各路国家队资金合计持仓及较上期变化（报告期 <span id="fund-rpt">—</span>）</span></div>
+    <div class="table-scroll">
+      <table id="fund-table"><thead><tr>
+        <th class="ta-l">资金（机构）</th><th>持股市值</th><th>占总持仓</th><th>覆盖个股</th><th>较上期</th>
+      </tr></thead><tbody></tbody></table>
+    </div>
   </section>
   <section class="card">
     <div class="table-head"><h2>行业排行</h2><span class="hint"></span></div>

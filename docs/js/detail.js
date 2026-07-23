@@ -9,8 +9,9 @@ async function boot(){
   CHART=echarts.init(document.getElementById('chart'));
   window.addEventListener('resize',()=>CHART.resize());
   bindPeriod();
-  document.getElementById('btn-all').onclick=()=>toggleAll(true);
-  document.getElementById('btn-none').onclick=()=>toggleAll(false);
+  document.getElementById('btn-all').onclick=()=>toggleAll('all');
+  document.getElementById('btn-none').onclick=()=>toggleAll('none');
+  document.getElementById('btn-total').onclick=()=>toggleAll('total');
   try{
     const [index,etfs]=await Promise.all([
       fetch('data/industry/index.json').then(r=>r.json()),
@@ -69,7 +70,7 @@ async function loadIndustry(ind){
     INDCACHE[ind.id]=data;
   }
   CUR={ind, dates:data.dates, total:data.total, etfs:data.etfs};
-  renderHead(); renderChart(); buildHolderSelect();
+  renderHead(); renderChart(); renderIndGroups(ind); buildHolderSelect();
 }
 
 function renderHead(){
@@ -132,10 +133,40 @@ function renderChart(){
     if(dz) LS.zoom={start:dz.start,end:dz.end};
   });
 }
-function toggleAll(on){
+function toggleAll(mode){
   if(!LEGEND_SEL)return;
-  Object.keys(LEGEND_SEL).forEach(k=>LEGEND_SEL[k]=on|| k==='总量');
+  Object.keys(LEGEND_SEL).forEach(k=>{ LEGEND_SEL[k]= mode==='all'?true : mode==='total'?(k==='总量') : false; });
   CHART.setOption({legend:{selected:LEGEND_SEL}});
+}
+
+// 本行业国家队持仓(按资金/机构)：聚合该行业各成员 ETF 的国家队持有人，按机构组汇总份额+市值+近似环比
+function renderIndGroups(ind){
+  const tb=document.querySelector('#ind-groups tbody');
+  const codes=ind.codes||[];
+  const g={}; let tAmt=0,tPrev=0,tMv=0, rpt='';
+  codes.forEach(c=>{
+    const e=ETFMAP[c]; if(!e) return;
+    rpt=e.report_date||rpt;
+    const nav=(e.nt_amount? (e.nt_value/e.nt_amount):0);
+    (e.nt_holders||[]).forEach(h=>{
+      const key=h.group||'其他';
+      const cell=g[key]||(g[key]={amount:0,mv:0,prev:0});
+      const amt=h.amount||0;
+      const prevAmt=(h.prev_ratio!=null&&h.ratio)?amt*(h.prev_ratio/h.ratio):0;
+      cell.amount+=amt; cell.mv+=amt*nav; cell.prev+=prevAmt;
+      tAmt+=amt; tMv+=amt*nav; tPrev+=prevAmt;
+    });
+  });
+  document.getElementById('ig-rpt').textContent=rpt||'—';
+  const chgHtml=v=>v==null?'—':`<span class="${v>0?'pos':(v<0?'neg':'')}">${v>0?'+':''}${yi(v)}份</span>`;
+  const rows=Object.entries(g).map(([k,v])=>({k,...v})).sort((a,b)=>b.amount-a.amount);
+  let html=rows.map(r=>
+    `<tr class="nt-row"><td class="ta-l nt">${r.k}</td><td class="ta-l">${r.k}</td>`+
+    `<td>${yi(r.amount)}份</td><td>${tAmt?pct(r.amount/tAmt*100):'—'}</td>`+
+    `<td>${yi(r.mv)}</td><td>${chgHtml(r.amount-r.prev)}</td></tr>`).join('');
+  html+=`<tr class="total-row"><td class="ta-l"><b>合计</b></td><td></td><td><b>${yi(tAmt)}份</b></td>`+
+    `<td><b>100.00%</b></td><td><b>${yi(tMv)}</b></td><td><b>${chgHtml(tAmt-tPrev)}</b></td></tr>`;
+  tb.innerHTML=html||'<tr><td colspan="6" class="muted">无</td></tr>';
 }
 
 // —— 持有人下拉：切换行业内某只 ETF 的十大持有人 ——

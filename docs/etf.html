@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ETF总览 · 国家队持仓看板</title>
+<meta name="description" content="按行业追踪中央汇金 / 汇金资管 / 社保基金 / 证金公司持有的 ETF 及份额">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🐰</text></svg>">
+<link rel="stylesheet" href="css/style.css">
+<script src="js/vendor/echarts.min.js"></script>
+</head>
+<body>
+<header class="topbar">
+  <div class="wrap">
+    <h1>🇨🇳 国家队持仓看板 · ETF</h1>
+    <p class="sub">按行业追踪 <b>中央汇金 · 汇金资管 · 社保基金 · 证金公司</b> 持有的 ETF 与份额</p>
+    <nav class="nav"><a href="index.html" class="home">🏠 总览</a><span class="seg-nav"><a href="etf.html" class="on">ETF</a><a href="stock.html">个股</a></span><span class="sub-nav"><a href="etf.html" class="on">总览</a><a href="trends.html">走势</a><a href="detail.html">详情</a></span><a href="logs.html">日志</a></nav>
+    <div id="meta" class="meta"></div>
+  </div>
+</header>
+
+<main class="wrap">
+  <section id="run-status"></section>
+  <section id="stats" class="stats"></section>
+  <section class="charts">
+    <div class="card">
+      <h2>各行业国家队持有市值</h2>
+      <div id="chart-industry" class="chart"></div>
+    </div>
+    <div class="card">
+      <h2>国家队机构分布</h2>
+      <div id="chart-group" class="chart"></div>
+    </div>
+  </section>
+  <section class="card">
+    <div class="table-head">
+      <h2>行业排行</h2>
+      <span class="hint">点击任意行展开该行业下的国家队 ETF</span>
+    </div>
+    <div class="table-scroll">
+      <table id="industry-table">
+        <thead>
+          <tr>
+            <th class="ta-l">行业</th>
+            <th data-sort="num_etfs">ETF 数</th>
+            <th data-sort="nt_value" class="active desc">国家队持有市值</th>
+            <th data-sort="nt_ratio">平均持有占比</th>
+            <th data-sort="amount_change">较上期份额变化</th>
+            <th class="ta-l">主要国家队机构</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </section>
+
+  <footer class="disclaimer">
+    <p><b>数据说明：</b>「国家队持有」来自各 ETF 半年报 / 年报披露的十大持有人（命中中央汇金 / 汇金资管 / 社保基金 / 证金公司等关键词）。
+    持有人数据<b>半年才更新一次、最长滞后约 6 个月</b>，仅反映最近披露报告期的快照。
+    「持有市值」≈ 报告期持有份额 × 最新单位净值，为近似值。份额来自上交所 / 深交所公开接口。</p>
+    <p class="muted">本站为公开数据聚合，仅供研究参考，不构成任何投资建议。数据源：上交所、深交所、新浪财经。</p>
+  </footer>
+</main>
+
+<script src="js/util.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>
