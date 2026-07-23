@@ -133,6 +133,51 @@ def fetch_szse_list() -> dict:
 
 
 # ==================================================================
+# 深交所 ETF 历史逐日份额（fund.szse.cn fund_jjgm，按日期区间；单窗口≤~110 交易日）
+# ==================================================================
+_SZSE_FUND_URL = "https://fund.szse.cn/api/report/ShowReport/data"
+_SZSE_FUND_HEADERS = {"User-Agent": UA, "Referer": "https://fund.szse.cn/"}
+
+
+def fetch_szse_shares_history(code, start, end):
+    """
+    深市 ETF 在 [start, end] 区间的历史逐日份额。start/end='YYYY-MM-DD'。
+    返回 [[date, share(份)]...]。单个区间上限约 110 个交易日，调用方需分窗。
+    current_size 单位万份 → ×10000 转份。
+    """
+    out = []
+    page = 1
+    total_pages = None
+    while True:
+        params = {"SHOWTYPE": "JSON", "CATALOGID": "fund_jjgm", "TABKEY": "tab1",
+                  "txtDm": code, "txtStart": start, "txtEnd": end, "PAGENO": str(page)}
+        try:
+            r = requests.get(_SZSE_FUND_URL, params=params,
+                             headers=_SZSE_FUND_HEADERS, timeout=REQUEST_TIMEOUT)
+            blocks = r.json()
+        except Exception:  # noqa
+            break
+        if not blocks:
+            break
+        blk = blocks[0]
+        if total_pages is None:
+            total_pages = int(blk.get("metadata", {}).get("pagecount", 1) or 1)
+        for row in blk.get("data", []):
+            d = row.get("size_date")
+            cs = row.get("current_size")
+            if d and cs:
+                try:
+                    out.append([d, float(str(cs).replace(",", "")) * 10000])
+                except ValueError:
+                    continue
+        if page >= (total_pages or 1):
+            break
+        page += 1
+        time.sleep(0.1)
+    return out
+
+
+# ==================================================================
 # 新浪 十大持有人
 # ==================================================================
 _RE_OPTION = re.compile(r'<option\s+value="([0-9]{4}-[0-9]{2}-[0-9]{2})"')

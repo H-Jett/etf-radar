@@ -488,13 +488,35 @@ def backfill_share_history(etfs, trade_date, start_date):
             if done % 200 == 0 or done == len(todo):
                 log.info("  补缺进度 %d/%d（有效交易日 %d）", done, len(todo), got)
 
+    # 深交所：fund.szse.cn/fund_jjgm 逐日历史份额（分窗 ≤150 自然日 + 分页 + 增量去重）
+    sz_codes = [r["code"] for r in etfs if r["exchange"] == "sz"]
+    if sz_codes:
+        log.info("回补深交所份额：%d 只（fund_jjgm 历史逐日）...", len(sz_codes))
+
+        def sz_one(code):
+            have = by_code.get(code, set())
+            pts = []
+            w_end = end
+            while w_end >= start:
+                w_start = max(start, w_end - timedelta(days=150))
+                for d, v in S.fetch_szse_shares_history(
+                        code, w_start.strftime("%Y-%m-%d"), w_end.strftime("%Y-%m-%d")):
+                    if d not in have:
+                        pts.append([d, v])
+                w_end = w_start - timedelta(days=1)
+            return code, pts
+
+        szdone = 0
+        with ThreadPoolExecutor(max_workers=6) as ex:
+            for code, pts in ex.map(sz_one, sz_codes):
+                hist[code].extend(pts)
+                szdone += 1
+                if szdone % 5 == 0 or szdone == len(sz_codes):
+                    log.info("  深市份额 %d/%d", szdone, len(sz_codes))
+
     for c in hist:
         hist[c].sort(key=lambda x: x[0])
-    # 深交所无逐日接口：仅当前份额单点
-    for r in etfs:
-        if r["exchange"] == "sz" and r["total_share"]:
-            hist[r["code"]].append([trade_date, r["total_share"]])
-    log.info("份额回补完成，本轮新增 %d 个交易日", got)
+    log.info("份额回补完成，上交所新增 %d 个交易日", got)
     if RUN is not None:
         RUN["stats"]["share_days_added"] = got
     return hist
@@ -841,6 +863,15 @@ def run_init(start_date=None, no_holder_history=False):
         return False
 
     price_series = collect_prices(etfs, beg=beg, cap_date=trade_date)
+    # 收盘价兜底：本轮未取到的（如接口限流），用已存分片里 ≤trade_date 的最新价，
+    # 避免 close/nt_value 变 None（保护首页市值）
+    for r in etfs:
+        if r.get("close") is None:
+            p, _ = load_existing_series(r["code"])
+            pts = sorted(d for d in p if d <= trade_date)
+            if pts:
+                r["close"] = p[pts[-1]]
+                r["nt_value"] = (r["nt_amount"] * r["close"]) if r.get("nt_amount") else None
     share_hist = backfill_share_history(etfs, trade_date, start_date)
     holder_periods = None if no_holder_history else build_holder_periods(etfs)
 
@@ -915,18 +946,22 @@ def run_daily(no_report_check=False):
             r["total_share"] = master[code]["share"]
 
     etfs = list(etf_map.values())
-    # 收盘价只取近 60 天增量，按日期与既有合并（无需每天重拉全历史）
+    # 收盘价：近 60 天增量（东财，对齐份额日）
     beg = (datetime.strptime(trade_date, "%Y-%m-%d").date()
            - timedelta(days=60)).strftime("%Y%m%d")
     new_prices = collect_prices(etfs, beg=beg, cap_date=trade_date)
+    # 份额：近 25 天增量（上交所逐日 + 深交所 fund_jjgm，统一走 backfill，自动去重）
+    recent_start = (datetime.strptime(trade_date, "%Y-%m-%d").date()
+                    - timedelta(days=25)).strftime("%Y-%m-%d")
+    new_shares = backfill_share_history(etfs, trade_date, recent_start)
     price_series, share_hist = {}, {}
     for r in etfs:
         old_p, old_s = load_existing_series(r["code"])
         for d, v in new_prices.get(r["code"], []):
             old_p[d] = v                    # 收盘价按日期合并去重
-        if r["total_share"]:
-            old_s[trade_date] = r["total_share"]   # 追加当日份额（同日覆盖，不重复）
-        # 收盘价对齐份额日：不保留晚于 trade_date 的点(清理傍晚跑残留的更新一天)
+        for d, v in new_shares.get(r["code"], []):
+            old_s[d] = v                    # 份额按日期合并去重
+        # 收盘价对齐份额日：不保留晚于 trade_date 的点
         price_series[r["code"]] = sorted(([d, v] for d, v in old_p.items() if d <= trade_date),
                                          key=lambda x: x[0])
         share_hist[r["code"]] = sorted(([d, v] for d, v in old_s.items()), key=lambda x: x[0])
