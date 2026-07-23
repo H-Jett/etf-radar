@@ -13,7 +13,9 @@ import json
 import time
 import logging
 import subprocess
-from datetime import date, timedelta
+from datetime import datetime, timedelta, timezone
+
+_CN_TZ = timezone(timedelta(hours=8))   # 所有日期按北京时间(UTC+8)确定
 
 import requests
 import urllib3
@@ -67,7 +69,7 @@ def fetch_sse_shares(date_str: str) -> dict:
 def fetch_sse_shares_latest(max_lookback: int = 12):
     """从今天往回找最近一个有数据的交易日。返回 (date_str, {code:{...}})。"""
     for i in range(1, max_lookback + 1):
-        d = date.today() - timedelta(days=i)
+        d = datetime.now(_CN_TZ).date() - timedelta(days=i)
         ds = d.strftime("%Y-%m-%d")
         data = fetch_sse_shares(ds)
         if data:

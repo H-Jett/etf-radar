@@ -1,27 +1,5 @@
 /* ===== 首页：行业国家队总览 ===== */
-// 统一调色板（三个页面完全一致）
-const PALETTE = ['#c8102e','#2b6cb0','#e07b39','#1a9e5f','#8a56c2','#d4a017',
-  '#3aa0a0','#c2506e','#5b8c2a','#b5651d','#4a6fa5','#9c3848','#2f8f6b','#a06cd5',
-  '#0e7490','#be123c','#7c3aed','#0891b2','#6b7280','#c99a2e'];
-function hashIdx(str){let h=0;for(let i=0;i<str.length;i++)h=(h*31+str.charCodeAt(i))>>>0;return h;}
-// 按“行业名”稳定取色：优先用 industry_order 的固定序号，保证同一行业跨页同色
-function colorOf(name){
-  const ord=(META.industry_order||[]);
-  const i=ord.indexOf(name);
-  return PALETTE[(i>=0?i:hashIdx(name))%PALETTE.length];
-}
-const colorAt=(i)=>PALETTE[((i%PALETTE.length)+PALETTE.length)%PALETTE.length];
-
-// —— 数值格式化 ——
-function yi(v){ // 元/份 -> 亿；上万亿转“万亿”
-  if(v==null) return '—';
-  const a=Math.abs(v);
-  if(a>=1e12) return (v/1e12).toFixed(2)+'万亿';
-  if(a>=1e8)  return (v/1e8).toFixed(1)+'亿';
-  if(a>=1e4)  return (v/1e4).toFixed(1)+'万';
-  return v.toFixed(0);
-}
-function pct(v){ return v==null?'—':(v).toFixed(2)+'%'; }
+// PALETTE / colorOf / colorAt / yi / pct 见 js/util.js（四页共用）
 function signCls(v){ return v>0?'pos':(v<0?'neg':''); }
 function signStr(v,fmt){ if(v==null||v===0) return fmt(v); return (v>0?'+':'')+fmt(v); }
 
@@ -36,6 +14,7 @@ async function boot(){
       fetch('data/industries.json').then(r=>r.json()),
     ]);
     INDUSTRIES=industries; META=meta;
+    setIndustryOrder(meta.industry_order||[]);   // 供 colorOf 稳定取色
     const hint=document.querySelector('.table-head .hint');
     if(hint) hint.innerHTML=`持仓口径：报告期 <b>${meta.report_date||'—'}</b>（十大持有人半年披露一次）· 点击任意行展开成员 ETF`;
     renderMeta(meta); renderStats(meta,industries);

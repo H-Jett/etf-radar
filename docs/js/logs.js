@@ -1,8 +1,6 @@
 /* ===== 采集日志：按月翻页浏览全部运行记录 ===== */
+// yi 见 js/util.js；MAP 为日志页专用状态标签
 const MAP={ok:['✅','正常','ok'],warning:['⚠️','警告','warn'],error:['❌','异常','err']};
-function yi(v){ if(v==null)return'—'; const a=Math.abs(v);
-  if(a>=1e12)return(v/1e12).toFixed(2)+'万亿'; if(a>=1e8)return(v/1e8).toFixed(1)+'亿';
-  if(a>=1e4)return(v/1e4).toFixed(1)+'万'; return(+v).toFixed(0);}
 let MONTHS=[], CUR=0;
 
 async function boot(){

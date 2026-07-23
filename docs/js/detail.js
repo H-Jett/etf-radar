@@ -1,23 +1,7 @@
 /* ===== 行业详情：成员 ETF 份额多线 + 总量线 + 图例勾选；持有人下拉切换 ===== */
-// 与首页/走势页一致的调色板(详情页各成员 ETF 线按顺序取色;总量线固定红色)
-const IND_COLORS=['#2b6cb0','#e07b39','#1a9e5f','#8a56c2','#d4a017','#3aa0a0',
-  '#c2506e','#5b8c2a','#b5651d','#4a6fa5','#9c3848','#2f8f6b','#a06cd5','#0e7490',
-  '#be123c','#7c3aed','#0891b2','#6b7280','#c99a2e','#5b21b6'];
-// 注：详情页是"同一行业内多只 ETF"的对比，用顺序取色即可；跨页一致性针对的是"行业色"
-// (首页/走势页)，两者场景不同。
-function yi(v){ if(v==null)return'—'; const a=Math.abs(v);
-  if(a>=1e12)return(v/1e12).toFixed(2)+'万亿'; if(a>=1e8)return(v/1e8).toFixed(1)+'亿';
-  if(a>=1e4)return(v/1e4).toFixed(1)+'万'; return(+v).toFixed(0);}
-function pct(v){return v==null?'—':(+v).toFixed(2)+'%';}
+// PALETTE / colorAt / yi / pct / LS / bucketKey 见 js/util.js（四页共用）
+// 详情页各成员 ETF 线按顺序从 PALETTE 取色（同一行业内对比，用顺序即可）；总量线固定红色
 const qs=new URLSearchParams(location.search);
-
-// 用户偏好持久化(跨行业、跨页面共享):日/周/月 + 拖动的时间段
-const LS={
-  get period(){return localStorage.getItem('etf.period')||'D';},
-  set period(v){try{localStorage.setItem('etf.period',v);}catch(e){}},
-  get zoom(){try{return JSON.parse(localStorage.getItem('etf.zoom'))||null;}catch(e){return null;}},
-  set zoom(v){try{localStorage.setItem('etf.zoom',JSON.stringify(v));}catch(e){}},
-};
 
 let CHART, PERIOD=LS.period, INDEX=null, ETFMAP={}, CUR=null, PREFER_CODE=null;
 
@@ -65,20 +49,26 @@ function bindPeriod(){
   });
 }
 
+const INDCACHE={};   // 行业数据缓存:切回已看过的行业不重复下载
 async function loadIndustry(ind){
-  LEGEND_SEL=null;   // 换行业重置图例勾选
-  const parts=await Promise.all((ind.years||[]).map(y=>
-    fetch(`data/industry/${ind.id}/${y}.json`).then(r=>r.json()).catch(()=>null)));
-  const dates=[], total=[], etfMap={};
-  parts.filter(Boolean).forEach(p=>{
-    p.dates.forEach(d=>dates.push(d));
-    p.total.forEach(v=>total.push(v));
-    p.etfs.forEach(e=>{
-      const cur=etfMap[e.code]||(etfMap[e.code]={code:e.code,name:e.name,shares:[]});
-      cur.shares.push(...e.shares);
+  LEGEND_SEL=null;   // 换行业重置图例勾选(不同行业成员不同)
+  let data=INDCACHE[ind.id];
+  if(!data){
+    const parts=await Promise.all((ind.years||[]).map(y=>
+      fetch(`data/industry/${ind.id}/${y}.json`).then(r=>r.json()).catch(()=>null)));
+    const dates=[], total=[], etfMap={};
+    parts.filter(Boolean).forEach(p=>{
+      p.dates.forEach(d=>dates.push(d));
+      p.total.forEach(v=>total.push(v));
+      p.etfs.forEach(e=>{
+        const cur=etfMap[e.code]||(etfMap[e.code]={code:e.code,name:e.name,shares:[]});
+        cur.shares.push(...e.shares);
+      });
     });
-  });
-  CUR={ind, dates, total, etfs:Object.values(etfMap)};
+    data={dates, total, etfs:Object.values(etfMap)};
+    INDCACHE[ind.id]=data;
+  }
+  CUR={ind, dates:data.dates, total:data.total, etfs:data.etfs};
   renderHead(); renderChart(); buildHolderSelect();
 }
 
@@ -89,15 +79,7 @@ function renderHead(){
     `<b style="font-size:19px">${CUR.ind.name}</b>`;
 }
 
-// —— 周期分桶：返回每桶最后一个交易日的索引 ——
-function bucketKey(d,p){
-  if(p==='M')return d.slice(0,7);
-  if(p==='W'){const t=new Date(d+'T00:00:00');t.setDate(t.getDate()+3-((t.getDay()+6)%7));
-    const w1=new Date(t.getFullYear(),0,4);
-    const wn=1+Math.round(((t-w1)/864e5-3+((w1.getDay()+6)%7))/7);
-    return t.getFullYear()+'-W'+String(wn).padStart(2,'0');}
-  return d;
-}
+// —— 周期分桶：返回每桶最后一个交易日的索引（bucketKey 见 util.js）——
 function bucketize(dates,p){
   const m=new Map(); dates.forEach((d,i)=>m.set(bucketKey(d,p),i));
   const keys=[...m.keys()].sort();
@@ -120,8 +102,8 @@ function renderChart(){
      areaStyle:{color:'rgba(200,16,46,.05)'},connectNulls:true,data:pick(CUR.total)},
     ...etfs.map((e,i)=>({name:`${e.name}(${e.code})`,type:'line',smooth:true,
      showSymbol:false,connectNulls:true,sampling:'lttb',
-     lineStyle:{width:1.5,color:IND_COLORS[i%IND_COLORS.length]},
-     itemStyle:{color:IND_COLORS[i%IND_COLORS.length]},data:pick(e.shares)})),
+     lineStyle:{width:1.5,color:colorAt(i)},
+     itemStyle:{color:colorAt(i)},data:pick(e.shares)})),
   ];
   const z=LS.zoom;   // 恢复用户上次拖动的时间段（跨行业/页面一致）
   const zStart=z?z.start:(labels.length>90?Math.round((1-90/labels.length)*100):0);

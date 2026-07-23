@@ -1,24 +1,5 @@
 /* ===== 行业走势：总份额(日频 日/周/月) + 国家队持仓份额/占比(报告期) ===== */
-// 与首页/详情页完全一致的调色板
-const PALETTE = ['#c8102e','#2b6cb0','#e07b39','#1a9e5f','#8a56c2','#d4a017',
-  '#3aa0a0','#c2506e','#5b8c2a','#b5651d','#4a6fa5','#9c3848','#2f8f6b','#a06cd5',
-  '#0e7490','#be123c','#7c3aed','#0891b2','#6b7280','#c99a2e'];
-let META={};
-function hashIdx(str){let h=0;for(let i=0;i<str.length;i++)h=(h*31+str.charCodeAt(i))>>>0;return h;}
-function colorOf(name){const ord=(META.industry_order||[]);const i=ord.indexOf(name);
-  return PALETTE[(i>=0?i:hashIdx(name))%PALETTE.length];}
-function yi(v){ if(v==null)return'—'; const a=Math.abs(v);
-  if(a>=1e12)return(v/1e12).toFixed(2)+'万亿'; if(a>=1e8)return(v/1e8).toFixed(1)+'亿';
-  if(a>=1e4)return(v/1e4).toFixed(1)+'万'; return(+v).toFixed(0);}
-function pct(v){return v==null?'—':(+v).toFixed(2)+'%';}
-
-// 用户偏好持久化(与详情页共享同一套 key,保持一致)
-const LS={
-  get period(){return localStorage.getItem('etf.period')||'D';},
-  set period(v){try{localStorage.setItem('etf.period',v);}catch(e){}},
-  get zoom(){try{return JSON.parse(localStorage.getItem('etf.zoom'))||null;}catch(e){return null;}},
-  set zoom(v){try{localStorage.setItem('etf.zoom',JSON.stringify(v));}catch(e){}},
-};
+// PALETTE / colorOf / yi / pct / LS / bucketKey 见 js/util.js（四页共用）
 let CHART, METRIC='share', PERIOD=LS.period;
 let DAILY=null, PERIODS=null;   // 缓存
 let LEGEND_SEL=null;            // 图例选择状态(跨周期/指标保持一致)
@@ -33,7 +14,7 @@ async function boot(){
     b.classList.toggle('active', b.dataset.p===PERIOD));
   try{
     const meta=await fetch('data/meta.json').then(r=>r.json());
-    META=meta;
+    setIndustryOrder(meta.industry_order||[]);   // 供 colorOf 稳定取色
     await Promise.all([loadDaily(meta), loadPeriods()]);
     onMetric(); render();
   }catch(e){
@@ -76,15 +57,7 @@ function onMetric(){
     : '国家队在该行业各 ETF 的持有份额合计 · 半年一个点';
 }
 
-// —— 周期聚合（取桶内最后一个值）——
-function bucketKey(d,p){
-  if(p==='M')return d.slice(0,7);
-  if(p==='W'){const t=new Date(d+'T00:00:00');t.setDate(t.getDate()+3-((t.getDay()+6)%7));
-    const w1=new Date(t.getFullYear(),0,4);
-    const wn=1+Math.round(((t-w1)/864e5-3+((w1.getDay()+6)%7))/7);
-    return t.getFullYear()+'-W'+String(wn).padStart(2,'0');}
-  return d;
-}
+// —— 周期聚合（取桶内最后一个值）；bucketKey 见 util.js ——
 function aggSeries(dates,vals,p){
   const m=new Map();
   dates.forEach((d,i)=>{ if(vals[i]!=null) m.set(bucketKey(d,p),[d,vals[i]]); });
