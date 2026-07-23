@@ -492,6 +492,54 @@ def build_industry_timeseries(etfs, price_series, share_hist):
     return {"dates": dates, "industries": out}
 
 
+def build_industry_bundles(etfs, share_hist):
+    """
+    每个行业按年打包成 industry/<id>/<year>.json，含该行业各成员 ETF 的日频份额
+    与合计总量，供「行业详情」页一次拉取（避免逐 ETF 分片几百个请求）。
+    另写 industry/index.json 供前端建行业选择框与 名称->id 映射。
+    """
+    from collections import defaultdict
+    share_map = {c: dict(s) for c, s in share_hist.items()}
+    members = defaultdict(list)
+    for r in etfs:
+        if len(share_map.get(r["code"], {})) >= 5:      # 需有份额历史
+            members[r["industry"]].append(r)
+
+    # 用固定行业顺序分配 id（避免按价格/市值排序导致 id 每日漂移、文件全量改写）
+    def ord_key(ind):
+        return INDUSTRY_ORDER.index(ind) if ind in INDUSTRY_ORDER else 999
+    inds = sorted(members.keys(), key=lambda x: (ord_key(x), x))
+    index = {"industries": []}
+    for i, ind in enumerate(inds):
+        mem = members[ind]
+        all_dates = sorted({d for r in mem for d in share_map[r["code"]]})
+        years = sorted({d[:4] for d in all_dates})
+        index["industries"].append({
+            "id": i, "name": ind, "num_etfs": len(mem),
+            "codes": [r["code"] for r in mem], "years": years,
+        })
+        by_year = defaultdict(list)
+        for d in all_dates:
+            by_year[d[:4]].append(d)
+        for yr, dts in by_year.items():
+            etf_series = [{"code": r["code"], "name": r["name"],
+                           "shares": [share_map[r["code"]].get(d) for d in dts]}
+                          for r in mem]
+            total = []
+            for d in dts:
+                t = 0.0; has = False
+                for r in mem:
+                    v = share_map[r["code"]].get(d)
+                    if v is not None:
+                        t += v; has = True
+                total.append(round(t) if has else None)
+            write_json(os.path.join(C.INDUSTRY_DIR, str(i), f"{yr}.json"),
+                       {"industry": ind, "dates": dts, "total": total,
+                        "etfs": etf_series}, quiet=True)
+    write_json(os.path.join(C.INDUSTRY_DIR, "index.json"), index)
+    log.info("写出 industry 打包：%d 个行业", len(inds))
+
+
 def write_trends_sharded(ts):
     """把行业日频总份额按年份写成 trends/<year>.json。返回涉及的年份列表。"""
     dates = ts.get("dates", [])
@@ -661,6 +709,8 @@ def _write_all(trade_date, etfs, industries, price_series, share_hist,
     # 行业日频总份额 -> 按年分片
     ts = build_industry_timeseries(etfs, price_series, share_hist)
     trend_years = write_trends_sharded(ts)
+    # 行业内各 ETF 份额打包（行业详情页用）
+    build_industry_bundles(etfs, share_hist)
     series_years = sorted({y for r in etfs for y in r.get("years", [])})
 
     rc = Counter(r["report_date"] for r in etfs if r["report_date"])

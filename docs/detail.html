@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>ETF 详情 · 行业国家队看板</title>
+<title>行业详情 · 行业国家队 ETF 看板</title>
 <link rel="stylesheet" href="css/style.css">
 <script src="js/vendor/echarts.min.js"></script>
 </head>
@@ -11,19 +11,17 @@
 <header class="topbar">
   <div class="wrap">
     <h1>🇨🇳 行业国家队 ETF 看板</h1>
-    <p class="sub">价格 / 份额走势与国家队持有人明细</p>
-    <nav class="nav"><a href="index.html">行业总览</a><a href="trends.html">行业走势</a><a href="detail.html" class="on">ETF 详情</a></nav>
+    <p class="sub">按行业查看成员 ETF 份额与国家队持有人</p>
+    <nav class="nav"><a href="index.html">行业总览</a><a href="trends.html">行业走势</a><a href="detail.html" class="on">行业详情</a></nav>
   </div>
 </header>
 
 <main class="wrap">
-  <a href="index.html" class="back">← 返回行业总览</a>
-
   <section class="card">
     <div class="chart-toolbar">
       <div class="tb-left">
-        <label class="tb-label">ETF</label>
-        <select id="etf-select" class="etf-select"></select>
+        <label class="tb-label">行业</label>
+        <select id="ind-select" class="etf-select"></select>
       </div>
       <div class="tb-right">
         <div class="seg" id="period-seg">
@@ -33,39 +31,43 @@
         </div>
       </div>
     </div>
-    <div id="detail-head" class="detail-head"></div>
-    <div id="chart" class="chart" style="height:420px"></div>
-    <p class="muted" style="margin:4px 2px 0">提示：拖动底部滑块查看不同时段。左轴为<b>每日收盘价</b>（新浪日 K 收盘价，二级市场价格，≈单位净值但不完全相等，仅近约 1 年）；右轴为<b>总份额</b>（亿份，最长约 10 年）。</p>
-  </section>
-
-  <section class="card">
-    <h2>国家队持有人（报告期 <span id="rpt">—</span>）</h2>
-    <div class="table-scroll">
-      <table class="holder-table" id="nt-holders">
-        <thead><tr>
-          <th class="ta-l">机构</th><th class="ta-l">类别</th>
-          <th>持有份额</th><th>持有占比</th><th>上期占比</th><th>较上期</th>
-        </tr></thead>
-        <tbody></tbody>
-      </table>
+    <div id="ind-head" class="detail-head"></div>
+    <div class="line-tools">
+      <button id="btn-all" class="mini">全选</button>
+      <button id="btn-none" class="mini">仅总量</button>
+      <span class="hint">点击下方图例可单独显示/隐藏某只 ETF；<b>总量</b>为该行业所有成员份额之和</span>
     </div>
+    <div id="chart" class="chart" style="height:460px"></div>
+    <p class="muted" style="margin:4px 2px 0">拖动底部滑块查看不同时段；纵轴为份额（亿份），最长约 10 年。</p>
   </section>
 
   <section class="card">
-    <h2>十大持有人</h2>
+    <div class="chart-toolbar">
+      <div class="tb-left">
+        <label class="tb-label">十大持有人</label>
+        <select id="holder-select" class="etf-select"></select>
+      </div>
+      <div class="tb-right"><span class="hint" id="holder-rpt"></span></div>
+    </div>
+
+    <h3 class="sub-h">国家队持有人</h3>
     <div class="table-scroll">
-      <table class="holder-table" id="all-holders">
-        <thead><tr>
-          <th>排名</th><th class="ta-l">持有人名称</th>
-          <th>持有份额</th><th>持有占比</th>
-        </tr></thead>
-        <tbody></tbody>
-      </table>
+      <table class="holder-table" id="nt-holders"><thead><tr>
+        <th class="ta-l">机构</th><th class="ta-l">类别</th>
+        <th>持有份额</th><th>持有占比</th><th>上期占比</th><th>较上期</th>
+      </tr></thead><tbody></tbody></table>
+    </div>
+
+    <h3 class="sub-h">十大持有人（完整）</h3>
+    <div class="table-scroll">
+      <table class="holder-table" id="all-holders"><thead><tr>
+        <th>排名</th><th class="ta-l">持有人名称</th><th>持有份额</th><th>持有占比</th>
+      </tr></thead><tbody></tbody></table>
     </div>
   </section>
 
   <footer class="disclaimer">
-    <p class="muted">持有人数据来自半年报 / 年报，最长滞后约 6 个月，仅反映最近披露报告期快照。数据源：上交所、深交所、新浪财经。仅供研究参考，不构成投资建议。</p>
+    <p class="muted">份额为日频（上交所逐日，深交所为当前值）。持有人来自半年报 / 年报，最长滞后约 6 个月。数据源：上交所、深交所、新浪财经。仅供研究参考，不构成投资建议。</p>
   </footer>
 </main>
 

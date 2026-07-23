@@ -15,6 +15,7 @@ DATA_DIR = os.path.join(BASE_DIR, "docs", "data")          # 快照 JSON
 SERIES_DIR = os.path.join(DATA_DIR, "series")              # series/<code>/<year>.json 逐 ETF 逐年
 TRENDS_DIR = os.path.join(DATA_DIR, "trends")              # trends/<year>.json 各行业逐年日频
 HOLDERS_DIR = os.path.join(DATA_DIR, "holders")            # holders/periods.json 报告期序列
+INDUSTRY_DIR = os.path.join(DATA_DIR, "industry")          # industry/<id>/<year>.json 行业内各ETF份额打包
 LOG_DIR = os.path.join(BASE_DIR, "logs")
 
 # ------------------------------------------------------------------
