@@ -658,26 +658,26 @@ def build_industry_timeseries(etfs, price_series, share_hist):
     if not dates:
         return {"dates": [], "industries": {}, "note": "暂无份额历史"}
 
-    # 含任一份额点即纳入（与 industries.json / industry bundles 口径一致，
-    # 避免同一行业在不同页面忽有忽无）。深市成员通常只有当前 1 点。
+    MIN_DAILY = 5   # 有逐日份额历史(≥5点)才计入总线；深市"仅当前1点"的成员排除，避免末日跳变
     ind_members = defaultdict(list)
     for r in etfs:
-        if len(share_map.get(r["code"], {})) >= 1:
+        if len(share_map.get(r["code"], {})) >= 1:   # 含任一点即算该行业成员(行业集合一致)
             ind_members[r["industry"]].append(r)
 
     out = {}
     for ind, members in ind_members.items():
+        daily = [r for r in members if len(share_map.get(r["code"], {})) >= MIN_DAILY]
         ts_share = []
         for d in dates:
             tot = 0.0
             has = False
-            for r in members:
+            for r in daily:                          # 只累加有逐日历史的成员
                 sh = share_map.get(r["code"], {}).get(d)
                 if sh is not None:
                     tot += sh; has = True
             ts_share.append(round(tot) if has else None)
         out[ind] = {"total_share": ts_share, "num_etfs": len(members),
-                    "codes": [r["code"] for r in members]}
+                    "daily_members": len(daily), "codes": [r["code"] for r in members]}
     return {"dates": dates, "industries": out}
 
 
@@ -713,6 +713,8 @@ def build_industry_bundles(etfs, share_hist):
             next_id += 1
             name2id[ind] = iid
         mem = members[ind]
+        # 只有逐日历史(≥5点)的成员计入总线；深市单点成员仍作为个股线展示,不进总量(避免跳变)
+        daily = [r for r in mem if len(share_map[r["code"]]) >= 5]
         all_dates = sorted({d for r in mem for d in share_map[r["code"]]})
         years = sorted({d[:4] for d in all_dates})
         index["industries"].append({
@@ -729,7 +731,7 @@ def build_industry_bundles(etfs, share_hist):
             total = []
             for d in dts:
                 t = 0.0; has = False
-                for r in mem:
+                for r in daily:
                     v = share_map[r["code"]].get(d)
                     if v is not None:
                         t += v; has = True
