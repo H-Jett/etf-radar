@@ -35,6 +35,26 @@ a:hover{text-decoration:underline}
 
 main.wrap{padding-top:22px;padding-bottom:60px}
 
+/* 采集状态模块 */
+.run-status{background:var(--card);border-radius:var(--radius);box-shadow:var(--shadow);
+  padding:14px 18px;margin-bottom:16px;border-left:5px solid var(--muted)}
+.run-status.ok{border-left-color:var(--down)}
+.run-status.warn{border-left-color:var(--gold)}
+.run-status.err{border-left-color:var(--brand)}
+.rs-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.rs-icon{font-size:18px}
+.rs-label{font-weight:700;font-size:15px}
+.run-status.ok .rs-label{color:var(--down)}
+.run-status.warn .rs-label{color:var(--gold)}
+.run-status.err .rs-label{color:var(--brand)}
+.rs-time{color:var(--muted);font-size:12.5px}
+.rs-dots{margin-left:auto;display:flex;gap:3px;align-items:center}
+.rs-dot{width:9px;height:9px;border-radius:2px;background:var(--muted);display:inline-block}
+.rs-dot.ok{background:var(--down)} .rs-dot.warn{background:var(--gold)} .rs-dot.err{background:var(--brand)}
+.rs-note{margin-top:7px;font-size:12.5px;color:var(--muted)}
+.run-status.err .rs-note{color:var(--brand)}
+.run-status.warn .rs-note{color:var(--gold)}
+
 /* 统计卡 */
 .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:20px}
 .stat{background:var(--card);border-radius:var(--radius);padding:18px 20px;box-shadow:var(--shadow)}

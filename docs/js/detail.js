@@ -8,7 +8,15 @@ function yi(v){ if(v==null)return'—'; const a=Math.abs(v);
 function pct(v){return v==null?'—':(+v).toFixed(2)+'%';}
 const qs=new URLSearchParams(location.search);
 
-let CHART, PERIOD='D', INDEX=null, ETFMAP={}, CUR=null, PREFER_CODE=null;
+// 用户偏好持久化(跨行业、跨页面共享):日/周/月 + 拖动的时间段
+const LS={
+  get period(){return localStorage.getItem('etf.period')||'D';},
+  set period(v){try{localStorage.setItem('etf.period',v);}catch(e){}},
+  get zoom(){try{return JSON.parse(localStorage.getItem('etf.zoom'))||null;}catch(e){return null;}},
+  set zoom(v){try{localStorage.setItem('etf.zoom',JSON.stringify(v));}catch(e){}},
+};
+
+let CHART, PERIOD=LS.period, INDEX=null, ETFMAP={}, CUR=null, PREFER_CODE=null;
 
 async function boot(){
   CHART=echarts.init(document.getElementById('chart'));
@@ -45,9 +53,12 @@ function buildIndSelect(){
   };
 }
 function bindPeriod(){
-  document.querySelectorAll('#period-seg button').forEach(b=>b.onclick=()=>{
-    document.querySelectorAll('#period-seg button').forEach(x=>x.classList.remove('active'));
-    b.classList.add('active'); PERIOD=b.dataset.p; renderChart();
+  document.querySelectorAll('#period-seg button').forEach(b=>{
+    b.classList.toggle('active', b.dataset.p===PERIOD);   // 恢复已保存的周期
+    b.onclick=()=>{
+      document.querySelectorAll('#period-seg button').forEach(x=>x.classList.remove('active'));
+      b.classList.add('active'); PERIOD=b.dataset.p; LS.period=PERIOD; renderChart();
+    };
   });
 }
 
@@ -112,7 +123,9 @@ function renderChart(){
      lineStyle:{width:1.5,color:IND_COLORS[i%IND_COLORS.length]},
      itemStyle:{color:IND_COLORS[i%IND_COLORS.length]},data:pick(e.shares)})),
   ];
-  const startPct=labels.length>90?Math.round((1-90/labels.length)*100):0;
+  const z=LS.zoom;   // 恢复用户上次拖动的时间段（跨行业/页面一致）
+  const zStart=z?z.start:(labels.length>90?Math.round((1-90/labels.length)*100):0);
+  const zEnd=z?z.end:100;
   CHART.setOption({
     animationDuration:400,
     grid:{left:58,right:20,top:8,bottom:76},
@@ -124,12 +137,17 @@ function renderChart(){
     xAxis:{type:'category',data:labels,boundaryGap:false,axisLabel:{fontSize:11}},
     yAxis:{type:'value',name:'份额(亿)',scale:false,splitLine:{lineStyle:{color:'#eef1f6'}},
       axisLabel:{fontSize:11}},
-    dataZoom:[{type:'slider',start:startPct,end:100,height:18,bottom:20},
-              {type:'inside',start:startPct,end:100}],
+    dataZoom:[{type:'slider',start:zStart,end:zEnd,height:18,bottom:20},
+              {type:'inside',start:zStart,end:zEnd}],
     series,
   },true);
   CHART.off('legendselectchanged');
   CHART.on('legendselectchanged',p=>{LEGEND_SEL=p.selected;});
+  CHART.off('datazoom');
+  CHART.on('datazoom',()=>{                     // 保存拖动的时间段
+    const dz=(CHART.getOption().dataZoom||[])[0];
+    if(dz) LS.zoom={start:dz.start,end:dz.end};
+  });
 }
 function toggleAll(on){
   if(!LEGEND_SEL)return;

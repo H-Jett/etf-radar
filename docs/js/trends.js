@@ -7,14 +7,24 @@ function yi(v){ if(v==null)return'—'; const a=Math.abs(v);
   if(a>=1e4)return(v/1e4).toFixed(1)+'万'; return(+v).toFixed(0);}
 function pct(v){return v==null?'—':(+v).toFixed(2)+'%';}
 
-let CHART, METRIC='share', PERIOD='D';
+// 用户偏好持久化(与详情页共享同一套 key,保持一致)
+const LS={
+  get period(){return localStorage.getItem('etf.period')||'D';},
+  set period(v){try{localStorage.setItem('etf.period',v);}catch(e){}},
+  get zoom(){try{return JSON.parse(localStorage.getItem('etf.zoom'))||null;}catch(e){return null;}},
+  set zoom(v){try{localStorage.setItem('etf.zoom',JSON.stringify(v));}catch(e){}},
+};
+let CHART, METRIC='share', PERIOD=LS.period;
 let DAILY=null, PERIODS=null;   // 缓存
 
 async function boot(){
   CHART=echarts.init(document.getElementById('chart'));
   window.addEventListener('resize',()=>CHART.resize());
   bindSeg('metric-seg','m',v=>{METRIC=v; onMetric(); render();});
-  bindSeg('period-seg','p',v=>{PERIOD=v; render();});
+  bindSeg('period-seg','p',v=>{PERIOD=v; LS.period=v; render();});
+  // 恢复已保存的周期按钮高亮
+  document.querySelectorAll('#period-seg button').forEach(b=>
+    b.classList.toggle('active', b.dataset.p===PERIOD));
   try{
     const meta=await fetch('data/meta.json').then(r=>r.json());
     await Promise.all([loadDaily(meta), loadPeriods()]);
@@ -112,7 +122,9 @@ function render(){
     symbolSize:5, connectNulls:true, sampling:'lttb', lineStyle:{width:2,color:colorFor[ind]},
     itemStyle:{color:colorFor[ind]}, data:D.inds[ind],
   }));
-  const startPct=D.x.length>60?Math.round((1-60/D.x.length)*100):0;
+  const z=LS.zoom;   // 恢复用户上次拖动的时间段（与详情页共享）
+  const zStart=z?z.start:(D.x.length>60?Math.round((1-60/D.x.length)*100):0);
+  const zEnd=z?z.end:100;
   CHART.setOption({
     animationDuration:400,
     grid:{left:60,right:24,top:12,bottom:70},
@@ -126,10 +138,15 @@ function render(){
     yAxis:{type:'value',scale:METRIC!=='share',
       axisLabel:{fontSize:11,formatter:v=>METRIC==='ratio'?v+'%':yi(v)},
       splitLine:{lineStyle:{color:'#eef1f6'}}},
-    dataZoom:[{type:'slider',start:startPct,end:100,height:20,bottom:28},
-              {type:'inside',start:startPct,end:100}],
+    dataZoom:[{type:'slider',start:zStart,end:zEnd,height:20,bottom:28},
+              {type:'inside',start:zStart,end:zEnd}],
     series,
   },true);
+  CHART.off('datazoom');
+  CHART.on('datazoom',()=>{                     // 保存拖动的时间段(与详情页共享)
+    const dz=(CHART.getOption().dataZoom||[])[0];
+    if(dz) LS.zoom={start:dz.start,end:dz.end};
+  });
   renderTable(D,order,colorFor);
 }
 

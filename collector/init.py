@@ -46,6 +46,10 @@ def main():
     except KeyboardInterrupt:
         log.warning("用户中断")
         sys.exit(130)
+    except Exception as e:  # noqa
+        collect.write_run_error("初始化异常：%s: %s" % (type(e).__name__, e))
+        log.exception("初始化异常")
+        sys.exit(1)
 
 
 if __name__ == "__main__":

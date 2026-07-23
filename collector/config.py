@@ -56,7 +56,7 @@ def is_nt_holder(name: str) -> bool:
 REQUEST_TIMEOUT = 20         # 单请求超时（秒）
 SCAN_WORKERS = 12            # 持有人扫描并发线程
 SCAN_DELAY = 0.15            # 每请求随机基准间隔（秒），防封
-PRICE_WORKERS = 10           # 价格采集并发
+PRICE_WORKERS = 6            # 价格采集并发（东财对高并发较敏感，取保守值）
 SHARE_BACKFILL_WORKERS = 8   # 份额历史并发（对上交所温和一些）
 HOLDER_HISTORY_MAX_PERIODS = 0   # 历史报告期上限，0=尽可能全
 MAX_RETRIES = 3

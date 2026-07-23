@@ -20,6 +20,8 @@ function signStr(v,fmt){ if(v==null||v===0) return fmt(v); return (v>0?'+':'')+f
 let INDUSTRIES=[], META={}, sortKey='nt_value', sortDesc=true;
 
 async function boot(){
+  // 采集状态独立加载，即使主数据缺失也能显示"今天是否跑成功"
+  fetch('data/status.json').then(r=>r.json()).then(renderStatus).catch(()=>{});
   try{
     const [meta,industries]=await Promise.all([
       fetch('data/meta.json').then(r=>r.json()),
@@ -35,6 +37,30 @@ async function boot(){
   }catch(e){
     document.querySelector('main').innerHTML='<div class="loading">数据尚未生成，请先运行采集脚本或等待 GitHub Actions 首次运行。<br>'+e+'</div>';
   }
+}
+
+function renderStatus(s){
+  const el=document.getElementById('run-status');
+  if(!el||!s||!s.latest) return;
+  const L=s.latest;
+  const MAP={ok:['✅','当天采集正常','ok'],warning:['⚠️','采集有警告','warn'],error:['❌','采集异常','err']};
+  const [icon,label,cls]=MAP[L.status]||MAP.ok;
+  // 最近若干次运行的小方块,一眼看出连续是否正常
+  const dots=(s.recent||[]).slice(0,16).map(r=>{
+    const c=(MAP[r.status]||MAP.ok)[2];
+    return `<i class="rs-dot ${c}" title="${r.run_at} · ${(MAP[r.status]||MAP.ok)[1]} · ${r.mode==='init'?'初始化':'每日'}"></i>`;
+  }).join('');
+  // 简要:只显示时间、行情日;异常/警告时补一行原因
+  const note=(L.errors&&L.errors[0])||(L.warnings&&L.warnings[0])||'';
+  el.className='run-status '+cls;
+  el.innerHTML=
+    `<div class="rs-head">
+       <span class="rs-icon">${icon}</span>
+       <span class="rs-label">${label}</span>
+       <span class="rs-time">最近采集 ${L.run_at} · 行情日 ${L.trade_date||'—'}</span>
+       <span class="rs-dots" title="最近 ${(s.recent||[]).length} 次采集">${dots}</span>
+     </div>`+
+    (note?`<div class="rs-note">${note}</div>`:'');
 }
 
 function renderMeta(m){

@@ -80,6 +80,68 @@ def read_json(path, default=None):
 
 
 # ------------------------------------------------------------------
+# 运行报告（当天采集摘要 / 异常，供网页状态模块展示）
+# ------------------------------------------------------------------
+RUN = None
+
+
+def run_start(mode):
+    global RUN
+    RUN = {"mode": mode, "t0": time.time(), "warnings": [], "errors": [], "stats": {}}
+
+
+def run_warn(msg):
+    log.warning(msg)
+    if RUN is not None:
+        RUN["warnings"].append(msg)
+
+
+def run_err(msg):
+    log.error(msg)
+    if RUN is not None:
+        RUN["errors"].append(msg)
+
+
+def write_status(trade_date, num_nt_etfs=None, num_industries=None,
+                 rescan=False, old_meta=None, committed=None):
+    """把本次运行摘要写入 docs/data/status.json（latest + 最近 20 次）。"""
+    warnings = RUN["warnings"] if RUN else []
+    errors = RUN["errors"] if RUN else []
+    level = "error" if errors else ("warning" if warnings else "ok")
+    old_td = (old_meta or {}).get("trade_date")
+    latest = {
+        "run_at": now_cn(),
+        "mode": RUN["mode"] if RUN else "?",
+        "status": level,
+        "trade_date": trade_date,
+        "is_new_trading_day": bool(trade_date and old_td and trade_date != old_td),
+        "num_nt_etfs": num_nt_etfs,
+        "num_industries": num_industries,
+        "report_rescan": rescan,
+        "duration_sec": round(time.time() - RUN["t0"], 1) if RUN else None,
+        "warnings": warnings,
+        "errors": errors,
+        "stats": RUN["stats"] if RUN else {},
+    }
+    prev = read_json(os.path.join(C.DATA_DIR, "status.json"), {}) or {}
+    recent = ([latest] + prev.get("recent", []))[:20]
+    write_json(os.path.join(C.DATA_DIR, "status.json"),
+               {"latest": latest, "recent": recent})
+    return level
+
+
+def write_run_error(msg):
+    """入口脚本捕获未预期异常时调用，落一条 error 状态（尽力而为）。"""
+    if RUN is None:
+        run_start("?")
+    run_err(msg)
+    try:
+        write_status(None, old_meta=read_json(os.path.join(C.DATA_DIR, "meta.json"), {}))
+    except Exception:  # noqa
+        pass
+
+
+# ------------------------------------------------------------------
 # 时间序列分片（series/<code>/<year>.json）读写与增量
 # ------------------------------------------------------------------
 def _year_of(date_str):
@@ -152,6 +214,14 @@ def build_etf_master():
                         "index_name": info.get("index_name", ""),
                         "share": info["share"]}
     log.info("全市场 ETF：沪 %d + 深 %d = %d 只", len(sse), len(szse), len(master))
+    if RUN is not None:
+        RUN["stats"]["sse_etfs"] = len(sse)
+        RUN["stats"]["szse_etfs"] = len(szse)
+        RUN["stats"]["trade_date"] = trade_date
+    if not sse:
+        run_err("上交所份额接口无数据（当日无行情或接口不可达）")
+    if not szse:
+        run_warn("深交所列表接口无数据/不完整")
     return trade_date, master
 
 
@@ -281,6 +351,9 @@ def collect_nt_etfs(candidates, master):
             if done % 50 == 0 or done == total:
                 log.info("  明细进度 %d/%d，确认国家队 ETF %d", done, total, len(etfs))
     log.info("确认国家队 ETF：%d 只", len(etfs))
+    if RUN is not None:
+        RUN["stats"]["candidates"] = len(candidates)
+        RUN["stats"]["nt_etfs"] = len(etfs)
     return etfs
 
 
@@ -309,14 +382,26 @@ def collect_prices(etfs, beg="0"):
             if done % 30 == 0 or done == len(etfs):
                 log.info("  价格进度 %d/%d", done, len(etfs))
 
+    missing = []
     for rec in etfs:
         close = None
         series = price_series.get(rec["code"], [])
         if series:
             close = series[-1][1]
+        else:
+            missing.append(rec["code"])
         rec["close"] = close
         rec["nt_value"] = (rec["nt_amount"] * close) if close else None
 
+    if RUN is not None:
+        RUN["stats"]["price_ok"] = len(etfs) - len(missing)
+        RUN["stats"]["price_total"] = len(etfs)
+    # 部分未取到 = 收盘价接口抖动，数据仍写入(有历史兜底)，不算异常；
+    # 只有“全部取不到”才判为警告(收盘价源可能整体不可用)。
+    if missing and len(missing) == len(etfs):
+        run_warn("收盘价接口整体不可用：%d 只 ETF 全部未取到" % len(missing))
+    elif missing:
+        log.info("  %d 只 ETF 本次未取到收盘价(接口抖动，用历史值)", len(missing))
     return price_series
 
 
@@ -394,6 +479,8 @@ def backfill_share_history(etfs, trade_date, start_date):
         if r["exchange"] == "sz" and r["total_share"]:
             hist[r["code"]].append([trade_date, r["total_share"]])
     log.info("份额回补完成，本轮新增 %d 个交易日", got)
+    if RUN is not None:
+        RUN["stats"]["share_days_added"] = got
     return hist
 
 
@@ -642,19 +729,23 @@ def run_init(start_date=None, no_holder_history=False):
     不会重复或覆盖历史（相同内容不会产生新提交）。
     """
     t0 = time.time()
+    run_start("init")
+    old_meta = read_json(os.path.join(C.DATA_DIR, "meta.json"), {})
     start_date = start_date or C.DEFAULT_START_DATE
     beg = start_date.replace("-", "")
     log.info("===== 初始化/全量采集开始 %s（起始 %s）=====", now_cn(), start_date)
     trade_date, master = build_etf_master()
     if not master or not trade_date:
-        log.error("未获取到 ETF 基础数据或交易日（trade_date=%s），终止（不写盘，保护既有数据）",
-                  trade_date)
+        run_err("未获取到 ETF 基础数据或交易日（trade_date=%s），终止（不写盘，保护既有数据）"
+                % trade_date)
+        write_status(trade_date, old_meta=old_meta)
         return False
 
     candidates = find_candidates(list(master.keys()))
     etfs = collect_nt_etfs(candidates, master)
     if not etfs:
-        log.error("未发现国家队 ETF，终止（不写盘）")
+        run_err("未发现国家队 ETF，终止（不写盘）")
+        write_status(trade_date, old_meta=old_meta)
         return False
 
     price_series = collect_prices(etfs, beg=beg)
@@ -663,6 +754,8 @@ def run_init(start_date=None, no_holder_history=False):
 
     industries = aggregate_industries(etfs)
     _write_all(trade_date, etfs, industries, price_series, share_hist, holder_periods)
+    write_status(trade_date, num_nt_etfs=len(etfs), num_industries=len(industries),
+                 rescan=True, old_meta=old_meta)
     log.info("===== 初始化完成，用时 %.1fs，国家队 ETF %d 只、行业 %d 个 =====",
              time.time() - t0, len(etfs), len(industries))
     return True
@@ -702,6 +795,7 @@ def run_daily(no_report_check=False):
     - 幂等：非交易日/重复运行不会产生重复点（按日期去重合并）。
     """
     t0 = time.time()
+    run_start("daily")
     log.info("===== 每日增量采集开始 %s =====", now_cn())
     universe = read_json(os.path.join(C.DATA_DIR, "universe.json"))
     old_etfs = read_json(os.path.join(C.DATA_DIR, "etfs.json"))
@@ -717,9 +811,12 @@ def run_daily(no_report_check=False):
 
     trade_date, master = build_etf_master()
     if not master or not trade_date:
-        log.error("未获取到当日行情或交易日（trade_date=%s）→ 跳过本次（不写盘，保护既有数据）",
-                  trade_date)
+        run_err("未获取到当日行情或交易日（trade_date=%s）→ 跳过本次（不写盘，保护既有数据）"
+                % trade_date)
+        write_status(trade_date, old_meta=old_meta)
         return False
+    if old_meta.get("trade_date") == trade_date and RUN is not None:
+        RUN["stats"]["no_new_trading_day"] = True  # 非交易日/份额未更新（正常）
     etf_map = {r["code"]: r for r in old_etfs}
     for code, r in etf_map.items():
         if code in master:
@@ -746,6 +843,8 @@ def run_daily(no_report_check=False):
 
     industries = aggregate_industries(etfs)
     _write_all(trade_date, etfs, industries, price_series, share_hist, holder_periods=None)
+    write_status(trade_date, num_nt_etfs=len(etfs), num_industries=len(industries),
+                 rescan=False, old_meta=old_meta)
     log.info("===== 每日增量完成，用时 %.1fs =====", time.time() - t0)
     return True
 

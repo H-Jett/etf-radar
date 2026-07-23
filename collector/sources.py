@@ -203,10 +203,16 @@ def fetch_kline(code: str, datalen: int = 120):
 _EM_KLINE_URL = "https://push2his.eastmoney.com/api/qt/stock/kline/get"
 
 
+_EM_HEADERS = {"User-Agent": UA, "Referer": "https://quote.eastmoney.com/"}
+
+
 def fetch_kline_em(code: str, exchange: str, beg: str = "0"):
     """
     东方财富全历史日 K。返回 [[date, close]...]（旧->新）。
     beg: 起始日 'YYYYMMDD' 或 '0'（全历史）。exchange: 'sh'/'sz'。
+
+    东财在密集请求下会断连/返回空 → 带重试 + 退避;区分“接口抖动”与“确实无数据”：
+    仅当拿到 rc==0 且 klines 明确为空时才判定无数据（不再重试）。
     """
     secid = ("1." if exchange == "sh" else "0.") + code
     params = {
@@ -214,21 +220,46 @@ def fetch_kline_em(code: str, exchange: str, beg: str = "0"):
         "fields2": "f51,f53",             # f51=日期, f53=收盘价（不复权）
         "klt": "101", "fqt": "0", "beg": beg, "end": "20500101", "lmt": "1000000",
     }
-    try:
-        r = requests.get(_EM_KLINE_URL, params=params,
-                         headers={"User-Agent": UA}, timeout=REQUEST_TIMEOUT)
-        klines = ((r.json() or {}).get("data") or {}).get("klines", []) or []
-    except Exception:  # noqa
-        return []
-    out = []
-    for row in klines:
-        parts = row.split(",")
-        if len(parts) >= 2:
-            try:
-                out.append([parts[0], float(parts[1])])
-            except ValueError:
-                continue
-    return out
+    def _parse(j):
+        data = (j or {}).get("data")
+        if data is None:
+            return None                                # 抖动/限流 → 需重试
+        out = []
+        for row in data.get("klines", []) or []:
+            parts = row.split(",")
+            if len(parts) >= 2:
+                try:
+                    out.append([parts[0], float(parts[1])])
+                except ValueError:
+                    continue
+        return out                                     # 明确结果（含空列表）
+
+    for attempt in range(1, MAX_RETRIES + 1):
+        # requests 优先
+        try:
+            r = requests.get(_EM_KLINE_URL, params=params,
+                             headers=_EM_HEADERS, timeout=REQUEST_TIMEOUT)
+            res = _parse(r.json())
+            if res is not None:
+                return res
+        except Exception:  # noqa 断连/超时/JSON 解析失败
+            pass
+        # curl 兜底（常能绕过 requests 被重置的连接）
+        try:
+            qs = "&".join(f"{k}={v}" for k, v in params.items())
+            cmd = ["curl", "-s", "--max-time", str(REQUEST_TIMEOUT),
+                   "-H", f"User-Agent: {UA}", "-H", "Referer: https://quote.eastmoney.com/",
+                   f"{_EM_KLINE_URL}?{qs}"]
+            out = subprocess.run(cmd, capture_output=True, timeout=REQUEST_TIMEOUT + 5)
+            if out.returncode == 0 and out.stdout:
+                res = _parse(json.loads(out.stdout.decode("utf-8", errors="replace")))
+                if res is not None:
+                    return res
+        except Exception:  # noqa
+            pass
+        time.sleep(1.2 * attempt + 0.3)
+    log.warning("东财 K 线多次重试(含 curl)仍失败：%s", secid)
+    return []
 
 
 # ==================================================================
