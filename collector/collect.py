@@ -370,12 +370,15 @@ def collect_nt_etfs(candidates, master):
 # ==================================================================
 # 4. 价格采集（回填 close / nt_value，并写时间序列）
 # ==================================================================
-def collect_prices(etfs, beg="0"):
-    """采集收盘价序列（东方财富全历史，与份额同期）。beg='YYYYMMDD' 或 '0'。"""
-    log.info("采集 %d 只 ETF 收盘价（东财，beg=%s）...", len(etfs), beg)
+def collect_prices(etfs, beg="0", cap_date=None):
+    """采集收盘价序列（东方财富全历史，与份额同期）。beg='YYYYMMDD' 或 '0'。
+    cap_date='YYYY-MM-DD' 时，只保留 ≤ 该日的收盘价（与份额日对齐，不记录更新的一天）。"""
+    log.info("采集 %d 只 ETF 收盘价（东财，beg=%s，截至 %s）...", len(etfs), beg, cap_date or "最新")
 
     def one(rec):
         series = S.fetch_kline_em(rec["code"], rec["exchange"], beg=beg)
+        if cap_date:
+            series = [p for p in series if p[0] <= cap_date]   # 对齐份额日
         time.sleep(random.uniform(0, C.SCAN_DELAY))
         if not series:
             return rec["code"], None, []
@@ -415,8 +418,9 @@ def collect_prices(etfs, beg="0"):
     return price_series
 
 
-def write_series_files(etfs, price_series, share_hist):
-    """合并已存分片 + 本轮新数据，按年写 series/<code>/<year>.json，并回填 rec['years']。"""
+def write_series_files(etfs, price_series, share_hist, cap_date=None):
+    """合并已存分片 + 本轮新数据，按年写 series/<code>/<year>.json，并回填 rec['years']。
+    cap_date 时清理收盘价里晚于份额日的点（与份额对齐）。"""
     for rec in etfs:
         code = rec["code"]
         old_p, old_s = load_existing_series(code)
@@ -424,6 +428,8 @@ def write_series_files(etfs, price_series, share_hist):
             old_p[dt] = v
         for dt, v in share_hist.get(code, []):
             old_s[dt] = v
+        if cap_date:
+            old_p = {dt: v for dt, v in old_p.items() if dt <= cap_date}
         rec["years"] = write_series_sharded(code, old_p, old_s)
     log.info("写出 series 分片：%d 只 ETF", len(etfs))
 
@@ -832,7 +838,7 @@ def run_init(start_date=None, no_holder_history=False):
         write_status(trade_date, old_meta=old_meta)
         return False
 
-    price_series = collect_prices(etfs, beg=beg)
+    price_series = collect_prices(etfs, beg=beg, cap_date=trade_date)
     share_hist = backfill_share_history(etfs, trade_date, start_date)
     holder_periods = None if no_holder_history else build_holder_periods(etfs)
 
@@ -910,7 +916,7 @@ def run_daily(no_report_check=False):
     # 收盘价只取近 60 天增量，按日期与既有合并（无需每天重拉全历史）
     beg = (datetime.strptime(trade_date, "%Y-%m-%d").date()
            - timedelta(days=60)).strftime("%Y%m%d")
-    new_prices = collect_prices(etfs, beg=beg)
+    new_prices = collect_prices(etfs, beg=beg, cap_date=trade_date)
     price_series, share_hist = {}, {}
     for r in etfs:
         old_p, old_s = load_existing_series(r["code"])
@@ -918,7 +924,9 @@ def run_daily(no_report_check=False):
             old_p[d] = v                    # 收盘价按日期合并去重
         if r["total_share"]:
             old_s[trade_date] = r["total_share"]   # 追加当日份额（同日覆盖，不重复）
-        price_series[r["code"]] = sorted(([d, v] for d, v in old_p.items()), key=lambda x: x[0])
+        # 收盘价对齐份额日：不保留晚于 trade_date 的点(清理傍晚跑残留的更新一天)
+        price_series[r["code"]] = sorted(([d, v] for d, v in old_p.items() if d <= trade_date),
+                                         key=lambda x: x[0])
         share_hist[r["code"]] = sorted(([d, v] for d, v in old_s.items()), key=lambda x: x[0])
         # 回填最新收盘价 / nt_value
         if price_series[r["code"]]:
@@ -938,8 +946,8 @@ def _write_all(trade_date, etfs, industries, price_series, share_hist,
     from collections import Counter
     etfs.sort(key=lambda x: -(x["nt_value"] or x["nt_amount"]))
 
-    # 分片写逐 ETF 序列（合并已存 + 本轮），回填 rec['years']
-    write_series_files(etfs, price_series, share_hist)
+    # 分片写逐 ETF 序列（合并已存 + 本轮），收盘价对齐到份额日 trade_date
+    write_series_files(etfs, price_series, share_hist, cap_date=trade_date)
     # 从合并后的分片读回**完整**序列，供行业聚合（增量模式下入参只含新数据，
     # 必须用合并后的全量，否则行业时间序列/打包会缺历史）
     full_price, full_share = {}, {}
