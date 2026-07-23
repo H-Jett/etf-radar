@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ETF 详情 · 行业国家队看板</title>
+<link rel="stylesheet" href="css/style.css">
+<script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
+</head>
+<body>
+<header class="topbar">
+  <div class="wrap">
+    <h1>🇨🇳 行业国家队 ETF 看板</h1>
+    <p class="sub">价格 / 份额走势与国家队持有人明细</p>
+  </div>
+</header>
+
+<main class="wrap">
+  <a href="index.html" class="back">← 返回行业总览</a>
+
+  <section class="card">
+    <div class="chart-toolbar">
+      <div class="tb-left">
+        <label class="tb-label">ETF</label>
+        <select id="etf-select" class="etf-select"></select>
+      </div>
+      <div class="tb-right">
+        <div class="seg" id="period-seg">
+          <button data-p="D" class="active">日</button>
+          <button data-p="W">周</button>
+          <button data-p="M">月</button>
+        </div>
+      </div>
+    </div>
+    <div id="detail-head" class="detail-head"></div>
+    <div id="chart" class="chart" style="height:420px"></div>
+    <p class="muted" style="margin:4px 2px 0">提示：拖动图表底部的滑块可查看不同时间段；左轴为单位净值，右轴为总份额（亿份）。</p>
+  </section>
+
+  <section class="card">
+    <h2>国家队持有人（报告期 <span id="rpt">—</span>）</h2>
+    <div class="table-scroll">
+      <table class="holder-table" id="nt-holders">
+        <thead><tr>
+          <th class="ta-l">机构</th><th class="ta-l">类别</th>
+          <th>持有份额</th><th>持有占比</th><th>上期占比</th><th>较上期</th>
+        </tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>十大持有人</h2>
+    <div class="table-scroll">
+      <table class="holder-table" id="all-holders">
+        <thead><tr>
+          <th>排名</th><th class="ta-l">持有人名称</th>
+          <th>持有份额</th><th>持有占比</th>
+        </tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </section>
+
+  <footer class="disclaimer">
+    <p class="muted">持有人数据来自半年报 / 年报，最长滞后约 6 个月，仅反映最近披露报告期快照。数据源：上交所、深交所、新浪财经。仅供研究参考，不构成投资建议。</p>
+  </footer>
+</main>
+
+<script src="js/detail.js"></script>
+</body>
+</html>

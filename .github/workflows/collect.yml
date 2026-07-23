@@ -1,0 +1,61 @@
+name: 采集国家队 ETF 数据
+
+on:
+  schedule:
+    # GitHub Actions 使用 UTC；北京时间 09:00 = UTC 01:00。
+    # 取 01:03 略微错开整点，降低官方 cron 拥堵导致的延迟。
+    - cron: "3 1 * * *"
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "采集模式"
+        type: choice
+        default: daily
+        options: [daily, full]
+
+# 避免上一次未跑完又触发下一次
+concurrency:
+  group: collect
+  cancel-in-progress: false
+
+permissions:
+  contents: write   # 需要把生成的 JSON 提交回仓库
+
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: 检出仓库
+        uses: actions/checkout@v4
+
+      - name: 安装 Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: 安装依赖
+        run: pip install -r collector/requirements.txt
+
+      - name: 运行采集
+        run: |
+          if [ "${{ github.event.inputs.mode }}" = "full" ]; then
+            echo "手动全量采集"
+            python collector/collect.py --full
+          else
+            # 日更：脚本内部会自动检测是否有新报告期，有则升级为全量
+            python collector/collect.py
+          fi
+
+      - name: 提交数据变更
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/data
+          if git diff --cached --quiet; then
+            echo "数据无变化，跳过提交"
+          else
+            TS=$(TZ='Asia/Shanghai' date '+%Y-%m-%d %H:%M')
+            git commit -m "chore(data): 自动更新国家队 ETF 数据 ${TS} (北京时间)"
+            git push
+          fi
