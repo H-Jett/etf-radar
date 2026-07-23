@@ -1,119 +1,107 @@
-# 行业国家队 ETF 看板（GitHub Pages 版）
+# 行业国家队 ETF 雷达（GitHub Pages 版）
 
 按**行业 / 主题**追踪中国「国家队」——中央汇金、汇金资管、社保基金、证金公司（中国证券金融）——
-持有的 ETF 及其份额变化。**纯静态站点，无需服务器、无需数据库**：
-数据由 GitHub Actions 定时爬取并生成 JSON 提交回仓库，GitHub Pages 直接托管前端。
+持有的 ETF 及其份额、持仓占比变化。**纯静态站点，无服务器、无数据库**：
+GitHub Actions 每天定时爬取 → 生成 JSON 提交回仓库 → GitHub Pages 托管前端。
 
-> 灵感来自 [kitaki-Ciallo/etf-national-tracker](https://github.com/kitaki-Ciallo/etf-national-tracker)（Flask + PostgreSQL 版）。
-> 本项目把它重构为**静态托管 + 行业维度聚合**。
+🔗 在线：**https://h-jett.github.io/etf-radar/**
 
-## ✨ 特性
+> 灵感来自 [kitaki-Ciallo/etf-national-tracker](https://github.com/kitaki-Ciallo/etf-national-tracker)（Flask + PostgreSQL 版），
+> 本项目重构为**静态托管 + 行业维度聚合 + 点位准确的历史**。
 
-- **行业总览**：各行业国家队持有市值排行、平均持有占比、较上期份额变化、主要出资机构（首页表格 + 条形图 + 机构分布饼图）。
-- **ETF 详情 / 图表浏览器**：
-  - 下拉切换任意国家队 ETF（按行业分组）；
-  - **日 / 周 / 月**三种周期切换；
-  - 图表底部滑块**可拖动**查看不同时间段（ECharts dataZoom）；
-  - 单位净值（左轴）+ 总份额（右轴）双轴叠加；
-  - 十大持有人明细，国家队机构高亮，含本期 vs 上期占比变化、新进标记。
-- **每天北京时间 09:00 自动更新**，并在半年报 / 年报发布时**自动重扫**全市场持有人。
-- **数据结构化、无数据库**：全部是 `docs/data/` 下的 JSON 文件。
+## ✨ 功能（4 个页面）
+
+- **行业总览** `index.html`：各行业国家队持有市值排行、平均占比、较上期变化、机构分布（表 + 条形图 + 饼图）；
+  顶部有**当天采集状态**模块（✅/⚠️/❌ + 最近心跳，可展开看指标与警告）。
+- **行业走势** `trends.html`：各行业「总份额」日频曲线（**日/周/月**切换 + 拖动）与「国家队持仓份额/占比」报告期序列，附数据表格（首列固定）。
+- **行业详情** `detail.html`：选一个行业 → 该行业**所有成员 ETF 的份额多线 + 总量线**（图例勾选显隐）；下拉切换查看**单只 ETF 的十大持有人**。
+- **采集日志** `logs.html`：每次运行的完整记录（按月翻页），一眼看出每天是否正常、异常原因。
+
+交互：日/周/月与拖动的时间段用 `localStorage` **记忆并跨页共享**；图表本地渲染（`js/vendor/echarts.min.js`，不依赖 CDN）。
+
+## 🧭 关键口径（务必了解）
+
+- **时间一律北京时间（UTC+8）**。
+- **份额 T+1**：ETF 份额当日数据次日才披露，所以「行情日」永远是**前一交易日**；收盘价对齐到该日（价、份同日）。
+- **持仓占比 / 份额 = 报告期口径**：十大持有人只在半年报 / 年报披露，最长滞后约 6 个月；
+  历史各期为**点位准确**——每期只计入「当期实际持有」的 ETF（含后来已退出的），不被当前成员低估。
+- **持有市值** ≈ 报告期持有份额 × 最新收盘价，为近似值。
 
 ## 🗂️ 目录结构
 
 ```
 etf-nt-industry/
-├── collector/                # 采集层（Python，纯 requests，无 pandas/bs4/DB）
-│   ├── config.py             # 国家队关键词、接口 URL、参数
-│   ├── industry.py           # ETF 名 / 拟合指数 → 行业分类规则
-│   ├── sources.py            # 上交所 / 深交所 / 新浪 数据抓取
-│   ├── collect.py            # 主程序（--full 全量 / 默认日更）
+├── collector/                # 采集层（纯 requests，无 pandas/bs4/DB）
+│   ├── config.py             # 国家队关键词、接口、路径、参数
+│   ├── industry.py           # ETF 名/拟合指数 → 行业分类
+│   ├── sources.py            # 上交所份额 / 深交所份额(fund_jjgm) / 东财K线 / 新浪持有人
+│   ├── collect.py            # 共享库：run_init / run_daily / run_deep_history 及各采集聚合函数
+│   ├── init.py               # 入口：初始化/全量（--start / --deep-history）
+│   ├── daily.py              # 入口：每日增量
 │   └── requirements.txt
 ├── docs/                     # ← GitHub Pages 根目录
-│   ├── index.html            # 行业总览
-│   ├── trends.html           # 行业走势（份额/持仓占比随时间，日/周/月）
-│   ├── detail.html           # ETF 详情 / 图表浏览器
+│   ├── index / trends / detail / logs .html
 │   ├── css/style.css
-│   ├── js/{main,trends,detail}.js
-│   └── data/                 # 自动生成的 JSON（由 Actions 提交）
-│       ├── meta.json             # 更新时间、报告期、series_years、总量统计
-│       ├── industries.json       # 各行业国家队当前快照汇总（首页核心）
-│       ├── etfs.json             # 各国家队 ETF 快照 + 十大持有人 + years
-│       ├── universe.json         # 国家队 ETF 代码清单（日更复用）
-│       ├── series/<code>/<year>.json   # 每 ETF 每年日频 {prices,shares}
-│       ├── trends/<year>.json           # 各行业该年日频总份额
-│       └── holders/periods.json         # 各行业国家队持仓份额/占比 报告期序列
+│   ├── js/{util,main,trends,detail,logs}.js + js/vendor/echarts.min.js
+│   └── data/                 # Actions 自动生成/提交
+│       ├── meta.json                 # 更新时间/报告期/series_years/industry_order/统计
+│       ├── industries.json           # 各行业当前快照聚合（首页）
+│       ├── etfs.json                 # 各国家队 ETF 快照 + 十大持有人 + years
+│       ├── universe.json             # 国家队 ETF 清单（日更复用）
+│       ├── status.json               # 最新运行状态 + 最近 20 次
+│       ├── series/<code>/<year>.json # 每 ETF 每年日频 {prices, shares}
+│       ├── trends/<year>.json        # 各行业当年日频总份额
+│       ├── industry/<id>/<year>.json # 行业内各成员 ETF 份额打包 + index.json
+│       ├── holders/periods.json      # 各行业国家队持仓 报告期(半年)序列（点位准确）
+│       ├── holders/etf/<code>.json   # 每 ETF 分期国家队持仓（永久留存，支撑点位准确）
+│       └── runs/<YYYY-MM>.json       # 全量运行日志（按月分片）+ index.json
 └── .github/workflows/collect.yml
 ```
 
-**为什么按「ETF × 年份」「行业 × 年份」切分？** 份额是日频、往回补到约 10 年，若整只 ETF 存一个文件，每天提交都要重写整份大文件，git 历史会迅速膨胀。按年切分后，**每天只改「当年」那一小片**，旧年份分片永不再变，仓库保持精简、单文件都小。
+**为什么按年/月分片**：份额/价格回补到 ~10 年，若整只 ETF 一个大文件，每天提交都要重写整份、git 历史迅速膨胀。
+按「ETF×年份」「行业×年份」分片后，每天只改「当年」小片，旧年份永不再动，仓库精简。
 
-## 📊 数据结构（JSON）
+## 📊 数据源
 
-`industries.json`（首页）—— 数组，每行业一项：`nt_amount`（国家队持有份额，报告期口径）、`nt_value`（≈份额×最新净值）、`nt_ratio`（份额加权平均占比%）、`amount_change`（较上期）、`new_entries`、`groups`（各机构份额）、`etfs`（成员）。
-
-`etfs.json` —— 每只国家队 ETF：`nt_holders`（国家队持有人，带上期占比/新进/环比）、`all_holders`（完整十大）、`report_date`、`years`（有数据的年份）。
-
-`series/<code>/<year>.json` —— `{"prices":[["2026-07-22",4.765],…], "shares":[["2026-07-22",2.4e10],…]}`，日频；前端按需加载该 ETF 各年份分片并按日/周/月聚合。
-
-`trends/<year>.json` —— `{"dates":[…], "industries":{"宽基":{"total_share":[…]}}}`，各行业当年日频总份额（行业走势页用）。
-
-`holders/periods.json` —— `{"periods":["2016-06-30",…,"2025-12-31"], "industries":{"宽基":{"nt_amount":[…],"nt_ratio":[…],"num_etfs":[…]}}}`，**半年一个点**的国家队持仓演变（尽可能回溯到各 ETF 成立）。
+| 数据 | 来源 | 说明 |
+|---|---|---|
+| 上交所 ETF 逐日份额 | `query.sse.com.cn` COMMON_SSE_...ETFGM | 按 STAT_DATE 取任意历史日，TOT_VOL(万份) |
+| 深交所 ETF 逐日份额 | `fund.szse.cn` ShowReport `CATALOGID=fund_jjgm` | 按 txtStart/txtEnd 取历史，current_size(万份)，单窗≤~110交易日需分窗+分页 |
+| 收盘价（全历史日 K） | 东方财富 `push2his.eastmoney.com` kline | 与份额同期、对齐到行情日 |
+| 十大持有人 + 报告期 | 新浪财经 CaihuiFundInfoService | 半年报/年报 |
 
 ## 🚀 部署到 GitHub Pages（3 步）
 
-1. **新建仓库并推送本项目**（见下方「本地运行」先生成一份初始数据一起提交）。
-2. **开启 Pages**：仓库 `Settings → Pages → Build and deployment`：
-   - Source 选 **Deploy from a branch**；
-   - Branch 选 **`main`**，目录选 **`/docs`**，保存。
-   - 稍等片刻，站点地址形如 `https://<用户名>.github.io/<仓库名>/`。
-3. **授权 Actions 写权限**：`Settings → Actions → General → Workflow permissions`
-   选 **Read and write permissions**（否则 Actions 无法把数据提交回仓库）。
+1. 新建仓库并推送本项目（先本地跑一次生成初始数据一起提交，见下）。
+2. `Settings → Pages`：Source 选 **Deploy from a branch → `main` → `/docs`**。
+3. `Settings → Actions → General → Workflow permissions`：选 **Read and write**（否则 Actions 无法提交数据）。
 
-之后 Actions 每天北京时间 09:00 自动更新数据并推送，Pages 随之刷新。
-也可在 `Actions → 采集国家队 ETF 数据 → Run workflow` 手动触发（可选 `full` 全量）。
+之后 Actions 每天北京时间约 09:03 自动更新并推送，Pages 随之刷新。也可在 Actions 手动 `Run workflow`（`init` 可指定 `start` 补更久历史）。
 
-> ⚠️ GitHub 托管的 runner 位于境外。本项目所有接口（上交所 / 深交所 / 新浪）**境外一般可达**，
-> 并内置 `requests → curl` 兜底与重试。若个别时段被限流，可改用**中国境内的 self-hosted runner**，
-> 或本地跑 `collect.py` 后提交。
+> GitHub Pages 经典分支源有 **~10 次/小时构建配额**，短时间频繁推送会导致站点延迟重建——攒批提交即可。
 
-## 💻 本地运行（两个脚本）
+## 💻 本地运行
 
 ```bash
 cd collector
 pip install -r requirements.txt
 
-# ① 初始化 / 全量（首次建库，或往前补更久历史）
-python init.py                     # 从默认起始日 2016-01-01 起
+python init.py                     # 初始化/全量（默认从 2016-01-01）
 python init.py --start 2018-01-01  # 指定起始日
+python init.py --deep-history      # 深度回补：扫全市场历史报告期，补齐已退出但仍上市的历史国家队 ETF
+python daily.py                    # 每日增量（Actions 调用；发现新报告期自动升级初始化）
 
-# ② 每日增量（每个交易日收盘后 / GitHub Actions 调用）
-python daily.py                    # 追加当日份额+收盘价；发现新报告期自动升级初始化
-
-# 本地预览前端
-cd ../docs && python -m http.server 8899   # 打开 http://localhost:8899
+cd ../docs && python -m http.server 8899   # 本地预览 http://localhost:8899
 ```
 
-**容错 / 兼容已有数据**（两个脚本都遵守）：
-- **幂等**：可在已有数据上重复运行，份额按日期增量补缺、收盘价按日期合并、分片合并已存，
-  **绝不重复或弄乱历史**（相同内容不产生新提交）。
-- **自愈**：`daily.py` 无既有数据时自动回退初始化；检测到新半年报/年报报告期自动升级初始化。
-- **保护**：拉不到全市场基础数据 / 当日行情时直接跳过且**不写盘**，不破坏既有数据。
+**容错 / 幂等**：份额、收盘价按日期合并去重，**重复运行不产生重复、不破坏数据**；拉不到数据则跳过不写盘并落 error 状态；`daily` 无既有数据自动回退初始化。
 
-> 数据源：份额=上交所逐日接口；**收盘价=东方财富全历史日 K（与份额同期对齐，替代了有 1800 条上限的新浪 K 线）**；持有人=新浪财经。
+## ⚠️ 已知边界
 
-## 🏦 「国家队」口径与数据说明
+- 深市份额历史约回溯到 2016（fund_jjgm 起始）；2026-07 前就**彻底摘牌下市**的老 ETF，公开接口取不到，无法纳入历史（极少数）。
+- 十大持有人为**每只基金各自披露**，无"行业十大汇总"概念；行业层面看首页/走势页的国家队汇总。
 
-- **识别方式**：扫描每只 ETF 半年报 / 年报披露的**十大持有人**，命中以下关键词即计入国家队：
-  中央汇金、汇金资管、汇金投资、社保基金、全国社保、基本养老、证金、中国证券金融。
-  （可在 `collector/config.py` 的 `NT_KEYWORDS` / `NT_GROUPS` 调整。）
-- **重要时滞**：持有人数据依公募披露规则，**仅在半年报 / 年报出现，最长滞后约 6 个月**，
-  展示的占比 / 变化均为**最近披露报告期**的快照。
-- **持有市值**为近似值 = 报告期持有份额 × 最新单位净值（份额天天变动，持仓半年才披露，二者口径不同）。
-- **行业分类**基于 ETF 简称 + 拟合指数名的关键词规则（`collector/industry.py`），
-  宽基指数单列为「宽基」。规则可自行扩充。
-
-数据源：上海证券交易所、深圳证券交易所、新浪财经。**本站仅为公开数据聚合，供研究参考，不构成任何投资建议。**
+数据源：上交所、深交所、东方财富、新浪财经。**本站为公开数据聚合，仅供研究参考，不构成投资建议。**
 
 ## 📄 许可
 
