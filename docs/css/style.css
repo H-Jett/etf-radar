@@ -64,6 +64,13 @@ main.wrap{padding-top:22px;padding-bottom:60px}
 .rs-recent td{padding:4px 8px;border-bottom:1px solid #eef1f6;white-space:nowrap}
 .rs-ok{color:var(--down)} .rs-warn{color:var(--gold)} .rs-err{color:var(--brand)}
 
+/* 走势页表格：第一列(行业名)横向滚动时固定 */
+#trend-table th:first-child,#trend-table td:first-child{
+  position:sticky;left:0;z-index:2;background:var(--card);
+  box-shadow:1px 0 0 var(--line);
+}
+#trend-table thead th:first-child{z-index:3}
+
 /* 统计卡 */
 .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:20px}
 .stat{background:var(--card);border-radius:var(--radius);padding:18px 20px;box-shadow:var(--shadow)}

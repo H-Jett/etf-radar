@@ -21,6 +21,7 @@ const LS={
 };
 let CHART, METRIC='share', PERIOD=LS.period;
 let DAILY=null, PERIODS=null;   // 缓存
+let LEGEND_SEL=null;            // 图例选择状态(跨周期/指标保持一致)
 
 async function boot(){
   CHART=echarts.init(document.getElementById('chart'));
@@ -78,7 +79,7 @@ function onMetric(){
 // —— 周期聚合（取桶内最后一个值）——
 function bucketKey(d,p){
   if(p==='M')return d.slice(0,7);
-  if(p==='W'){const t=new Date(d);t.setHours(0,0,0,0);t.setDate(t.getDate()+3-((t.getDay()+6)%7));
+  if(p==='W'){const t=new Date(d+'T00:00:00');t.setDate(t.getDate()+3-((t.getDay()+6)%7));
     const w1=new Date(t.getFullYear(),0,4);
     const wn=1+Math.round(((t-w1)/864e5-3+((w1.getDay()+6)%7))/7);
     return t.getFullYear()+'-W'+String(wn).padStart(2,'0');}
@@ -121,7 +122,9 @@ function render(){
   const D=currentData();
   const order=Object.keys(D.inds).sort((a,b)=>latestVal(D.inds[b])-latestVal(D.inds[a]));
   const colorFor={}; order.forEach(ind=>colorFor[ind]=colorOf(ind));
-  const selected={}; order.forEach((ind,i)=>selected[ind]=i<8); // 默认显示前8
+  // 图例选择持久化:首次出现的行业默认显示前8;已有选择保持不变(切日/周/月不重置)
+  if(!LEGEND_SEL) LEGEND_SEL={};
+  order.forEach((ind,i)=>{ if(!(ind in LEGEND_SEL)) LEGEND_SEL[ind]=i<8; });
 
   const series=order.map(ind=>({
     name:ind, type:'line', smooth:METRIC!=='share'?false:true, showSymbol:METRIC!=='share',
@@ -134,7 +137,7 @@ function render(){
   CHART.setOption({
     animationDuration:400,
     grid:{left:60,right:24,top:12,bottom:70},
-    legend:{type:'scroll',top:0,data:order,selected,textStyle:{fontSize:11}},
+    legend:{type:'scroll',top:0,data:order,selected:LEGEND_SEL,textStyle:{fontSize:11}},
     tooltip:{trigger:'axis',
       formatter:ps=>{let s=ps[0].axisValue+'<br/>';
         ps.filter(p=>p.value!=null).sort((a,b)=>b.value-a.value).slice(0,12).forEach(p=>{
@@ -153,6 +156,8 @@ function render(){
     const dz=(CHART.getOption().dataZoom||[])[0];
     if(dz) LS.zoom={start:dz.start,end:dz.end};
   });
+  CHART.off('legendselectchanged');
+  CHART.on('legendselectchanged',p=>{LEGEND_SEL=p.selected;});  // 记住勾选
   renderTable(D,order,colorFor);
 }
 

@@ -92,7 +92,7 @@ function renderHead(){
 // —— 周期分桶：返回每桶最后一个交易日的索引 ——
 function bucketKey(d,p){
   if(p==='M')return d.slice(0,7);
-  if(p==='W'){const t=new Date(d);t.setHours(0,0,0,0);t.setDate(t.getDate()+3-((t.getDay()+6)%7));
+  if(p==='W'){const t=new Date(d+'T00:00:00');t.setDate(t.getDate()+3-((t.getDay()+6)%7));
     const w1=new Date(t.getFullYear(),0,4);
     const wn=1+Math.round(((t-w1)/864e5-3+((w1.getDay()+6)%7))/7);
     return t.getFullYear()+'-W'+String(wn).padStart(2,'0');}
