@@ -1,7 +1,10 @@
 /* ===== 行业详情：成员 ETF 份额多线 + 总量线 + 图例勾选；持有人下拉切换 ===== */
+// 与首页/走势页一致的调色板(详情页各成员 ETF 线按顺序取色;总量线固定红色)
 const IND_COLORS=['#2b6cb0','#e07b39','#1a9e5f','#8a56c2','#d4a017','#3aa0a0',
   '#c2506e','#5b8c2a','#b5651d','#4a6fa5','#9c3848','#2f8f6b','#a06cd5','#0e7490',
   '#be123c','#7c3aed','#0891b2','#6b7280','#c99a2e','#5b21b6'];
+// 注：详情页是"同一行业内多只 ETF"的对比，用顺序取色即可；跨页一致性针对的是"行业色"
+// (首页/走势页)，两者场景不同。
 function yi(v){ if(v==null)return'—'; const a=Math.abs(v);
   if(a>=1e12)return(v/1e12).toFixed(2)+'万亿'; if(a>=1e8)return(v/1e8).toFixed(1)+'亿';
   if(a>=1e4)return(v/1e4).toFixed(1)+'万'; return(+v).toFixed(0);}
@@ -45,7 +48,7 @@ async function boot(){
 function buildIndSelect(){
   const sel=document.getElementById('ind-select');
   sel.innerHTML=INDEX.industries.map(x=>
-    `<option value="${x.id}">${x.name}（${x.num_etfs} 只 ETF）</option>`).join('');
+    `<option value="${x.id}">${x.name}</option>`).join('');
   sel.onchange=()=>{
     const x=INDEX.industries.find(i=>String(i.id)===sel.value);
     history.replaceState(null,'','detail.html?ind='+encodeURIComponent(x.name));
@@ -80,13 +83,10 @@ async function loadIndustry(ind){
 }
 
 function renderHead(){
-  const b=INDEX.industries.find(i=>i.id===CUR.ind.id);
-  const last=[...CUR.total].reverse().find(v=>v!=null);
+  // 只保留行业名作为标题；具体数字(成员数/份额/起始日)由图表本身体现，
+  // 避免与随数据更新而变化的值产生 mismatch。
   document.getElementById('ind-head').innerHTML=
-    `<b style="font-size:19px">${CUR.ind.name}</b>`+
-    `<span class="badge">${b.num_etfs} 只成员 ETF</span>`+
-    `<span class="badge">最新总份额 ${yi(last)}份</span>`+
-    `<span class="badge">数据始于 ${CUR.dates[0]||'—'}</span>`;
+    `<b style="font-size:19px">${CUR.ind.name}</b>`;
 }
 
 // —— 周期分桶：返回每桶最后一个交易日的索引 ——
@@ -160,7 +160,7 @@ function buildHolderSelect(){
   const sel=document.getElementById('holder-select');
   const opts=CUR.ind.codes.map(c=>ETFMAP[c]).filter(Boolean)
     .sort((a,b)=>(b.nt_value||0)-(a.nt_value||0));
-  sel.innerHTML=opts.map(e=>`<option value="${e.code}">${e.name}（${e.code}）· 国家队${pct(e.nt_ratio)}</option>`).join('');
+  sel.innerHTML=opts.map(e=>`<option value="${e.code}">${e.name}（${e.code}）</option>`).join('');
   sel.onchange=()=>renderHolders(sel.value);
   const def=(PREFER_CODE&&opts.some(e=>e.code===PREFER_CODE))?PREFER_CODE:(opts[0]&&opts[0].code);
   PREFER_CODE=null;

@@ -1,8 +1,16 @@
 /* ===== 首页：行业国家队总览 ===== */
-const IND_COLORS = ['#c8102e','#e07b39','#2b6cb0','#1a9e5f','#8a56c2','#d4a017',
+// 统一调色板（三个页面完全一致）
+const PALETTE = ['#c8102e','#2b6cb0','#e07b39','#1a9e5f','#8a56c2','#d4a017',
   '#3aa0a0','#c2506e','#5b8c2a','#b5651d','#4a6fa5','#9c3848','#2f8f6b','#a06cd5',
-  '#c99a2e','#6b7280','#0e7490','#be123c'];
-const colorOf = (i)=>IND_COLORS[i%IND_COLORS.length];
+  '#0e7490','#be123c','#7c3aed','#0891b2','#6b7280','#c99a2e'];
+function hashIdx(str){let h=0;for(let i=0;i<str.length;i++)h=(h*31+str.charCodeAt(i))>>>0;return h;}
+// 按“行业名”稳定取色：优先用 industry_order 的固定序号，保证同一行业跨页同色
+function colorOf(name){
+  const ord=(META.industry_order||[]);
+  const i=ord.indexOf(name);
+  return PALETTE[(i>=0?i:hashIdx(name))%PALETTE.length];
+}
+const colorAt=(i)=>PALETTE[((i%PALETTE.length)+PALETTE.length)%PALETTE.length];
 
 // —— 数值格式化 ——
 function yi(v){ // 元/份 -> 亿；上万亿转“万亿”
@@ -92,7 +100,7 @@ function renderIndustryChart(inds){
     xAxis:{type:'value',axisLabel:{formatter:v=>yi(v)},splitLine:{lineStyle:{color:'#eef1f6'}}},
     yAxis:{type:'category',data:top.map(d=>d.industry),axisLabel:{fontSize:12}},
     series:[{type:'bar',data:top.map((d,i)=>({value:d.nt_value||0,
-      itemStyle:{color:colorOf(inds.indexOf(d)),borderRadius:[0,4,4,0]}})),
+      itemStyle:{color:colorOf(d.industry),borderRadius:[0,4,4,0]}})),
       barMaxWidth:20}]
   });
   window.addEventListener('resize',()=>el.resize());
@@ -109,7 +117,7 @@ function renderGroupChart(m,inds){
     series:[{type:'pie',radius:['42%','68%'],center:['50%','44%'],
       avoidLabelOverlap:true,itemStyle:{borderColor:'#fff',borderWidth:2},
       label:{show:false},
-      data:data.map((d,i)=>({...d,itemStyle:{color:colorOf(i)}}))}]
+      data:data.map((d,i)=>({...d,itemStyle:{color:colorAt(i)}}))}]
   });
   window.addEventListener('resize',()=>el.resize());
 }
@@ -134,14 +142,13 @@ function renderTable(){
   const tb=document.querySelector('#industry-table tbody');
   tb.innerHTML='';
   rows.forEach(b=>{
-    const ci=INDUSTRIES.indexOf(b);
     const groups=Object.entries(b.groups||{}).slice(0,3)
       .map(([k,v])=>`${k} ${yi(v)}`).join(' · ');
     const chg=b.amount_change, chgpct=b.amount_change_pct;
     const tr=document.createElement('tr');
     tr.className='ind-row';
     tr.innerHTML=
-      `<td class="ta-l"><span class="ind-name"><span class="dot" style="background:${colorOf(ci)}"></span>${b.industry}`+
+      `<td class="ta-l"><span class="ind-name"><span class="dot" style="background:${colorOf(b.industry)}"></span>${b.industry}`+
         `${b.new_entries?`<span class="chip new">新进 ${b.new_entries}</span>`:''}</span></td>`+
       `<td>${b.num_etfs}</td>`+
       `<td><b>${yi(b.nt_value)}</b></td>`+

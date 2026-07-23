@@ -1,7 +1,12 @@
 /* ===== 行业走势：总份额(日频 日/周/月) + 国家队持仓份额/占比(报告期) ===== */
-const IND_COLORS = ['#c8102e','#e07b39','#2b6cb0','#1a9e5f','#8a56c2','#d4a017',
+// 与首页/详情页完全一致的调色板
+const PALETTE = ['#c8102e','#2b6cb0','#e07b39','#1a9e5f','#8a56c2','#d4a017',
   '#3aa0a0','#c2506e','#5b8c2a','#b5651d','#4a6fa5','#9c3848','#2f8f6b','#a06cd5',
-  '#c99a2e','#6b7280','#0e7490','#be123c','#7c3aed','#0891b2'];
+  '#0e7490','#be123c','#7c3aed','#0891b2','#6b7280','#c99a2e'];
+let META={};
+function hashIdx(str){let h=0;for(let i=0;i<str.length;i++)h=(h*31+str.charCodeAt(i))>>>0;return h;}
+function colorOf(name){const ord=(META.industry_order||[]);const i=ord.indexOf(name);
+  return PALETTE[(i>=0?i:hashIdx(name))%PALETTE.length];}
 function yi(v){ if(v==null)return'—'; const a=Math.abs(v);
   if(a>=1e12)return(v/1e12).toFixed(2)+'万亿'; if(a>=1e8)return(v/1e8).toFixed(1)+'亿';
   if(a>=1e4)return(v/1e4).toFixed(1)+'万'; return(+v).toFixed(0);}
@@ -27,6 +32,7 @@ async function boot(){
     b.classList.toggle('active', b.dataset.p===PERIOD));
   try{
     const meta=await fetch('data/meta.json').then(r=>r.json());
+    META=meta;
     await Promise.all([loadDaily(meta), loadPeriods()]);
     onMetric(); render();
   }catch(e){
@@ -114,7 +120,7 @@ function latestVal(arr){ for(let i=arr.length-1;i>=0;i--) if(arr[i]!=null) retur
 function render(){
   const D=currentData();
   const order=Object.keys(D.inds).sort((a,b)=>latestVal(D.inds[b])-latestVal(D.inds[a]));
-  const colorFor={}; order.forEach((ind,i)=>colorFor[ind]=IND_COLORS[i%IND_COLORS.length]);
+  const colorFor={}; order.forEach(ind=>colorFor[ind]=colorOf(ind));
   const selected={}; order.forEach((ind,i)=>selected[ind]=i<8); // 默认显示前8
 
   const series=order.map(ind=>({

@@ -19,7 +19,6 @@ import json
 import time
 import random
 import logging
-import argparse
 from datetime import datetime, date, timedelta, timezone
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
@@ -616,17 +615,29 @@ def build_industry_bundles(etfs, share_hist):
         if len(share_map.get(r["code"], {})) >= 1:      # 含任一份额点即纳入（口径统一）
             members[r["industry"]].append(r)
 
-    # 用固定行业顺序分配 id（避免按价格/市值排序导致 id 每日漂移、文件全量改写）
+    # 行业 id 稳定：从既有 index.json 读 name->id 注册表，已有行业沿用旧 id，
+    # 新行业分配一个从未用过的新 id（不复用、不删旧文件 → 换名/新增都兼容，
+    # 且不会因成员集合变化导致 id 整体漂移、把所有行业文件重写一遍）。
+    prev_index = read_json(os.path.join(C.INDUSTRY_DIR, "index.json"), {}) or {}
+    name2id = {x["name"]: x["id"] for x in prev_index.get("industries", [])}
+    next_id = (max(name2id.values()) + 1) if name2id else 0
+
     def ord_key(ind):
         return INDUSTRY_ORDER.index(ind) if ind in INDUSTRY_ORDER else 999
-    inds = sorted(members.keys(), key=lambda x: (ord_key(x), x))
+    inds = sorted(members.keys(), key=lambda x: (ord_key(x), x))   # 显示顺序
     index = {"industries": []}
-    for i, ind in enumerate(inds):
+    for ind in inds:
+        if ind in name2id:
+            iid = name2id[ind]
+        else:
+            iid = next_id
+            next_id += 1
+            name2id[ind] = iid
         mem = members[ind]
         all_dates = sorted({d for r in mem for d in share_map[r["code"]]})
         years = sorted({d[:4] for d in all_dates})
         index["industries"].append({
-            "id": i, "name": ind, "num_etfs": len(mem),
+            "id": iid, "name": ind, "num_etfs": len(mem),
             "codes": [r["code"] for r in mem], "years": years,
         })
         by_year = defaultdict(list)
@@ -644,11 +655,11 @@ def build_industry_bundles(etfs, share_hist):
                     if v is not None:
                         t += v; has = True
                 total.append(round(t) if has else None)
-            write_json(os.path.join(C.INDUSTRY_DIR, str(i), f"{yr}.json"),
+            write_json(os.path.join(C.INDUSTRY_DIR, str(iid), f"{yr}.json"),
                        {"industry": ind, "dates": dts, "total": total,
                         "etfs": etf_series}, quiet=True)
     write_json(os.path.join(C.INDUSTRY_DIR, "index.json"), index)
-    log.info("写出 industry 打包：%d 个行业", len(inds))
+    log.info("写出 industry 打包：%d 个行业（id 稳定复用）", len(inds))
 
 
 def write_trends_sharded(ts):
@@ -887,6 +898,7 @@ def _write_all(trade_date, etfs, industries, price_series, share_hist,
         "total_nt_amount": total_amount,
         "total_nt_value": total_value,
         "series_years": series_years or trend_years,
+        "industry_order": INDUSTRY_ORDER,   # 供前端按行业名稳定取色（跨页一致）
         "nt_keywords": C.NT_KEYWORDS,
         "nt_groups": [g for g, _ in C.NT_GROUPS],
     }
