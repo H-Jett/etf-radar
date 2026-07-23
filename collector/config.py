@@ -17,6 +17,7 @@ TRENDS_DIR = os.path.join(DATA_DIR, "trends")              # trends/<year>.json 
 HOLDERS_DIR = os.path.join(DATA_DIR, "holders")            # holders/periods.json 报告期序列
 HOLDERS_ETF_DIR = os.path.join(HOLDERS_DIR, "etf")         # holders/etf/<code>.json 每只ETF分期持仓(永久留存)
 INDUSTRY_DIR = os.path.join(DATA_DIR, "industry")          # industry/<id>/<year>.json 行业内各ETF份额打包
+RUNS_DIR = os.path.join(DATA_DIR, "runs")                  # runs/<YYYY-MM>.json 全量运行日志(按月分片)+index.json
 LOG_DIR = os.path.join(BASE_DIR, "logs")
 
 # ------------------------------------------------------------------

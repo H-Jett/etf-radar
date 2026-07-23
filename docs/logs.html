@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>采集日志 · 行业国家队 ETF 看板</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="wrap">
+    <h1>🇨🇳 行业国家队 ETF 看板</h1>
+    <p class="sub">每日采集运行日志（全部保留，可按月翻页）</p>
+    <nav class="nav">
+      <a href="index.html">行业总览</a><a href="trends.html">行业走势</a>
+      <a href="detail.html">行业详情</a><a href="logs.html" class="on">采集日志</a>
+    </nav>
+  </div>
+</header>
+
+<main class="wrap">
+  <section class="card">
+    <div class="chart-toolbar">
+      <div class="tb-left">
+        <label class="tb-label">月份</label>
+        <select id="month-select" class="etf-select"></select>
+      </div>
+      <div class="tb-right">
+        <button id="prev-month" class="mini">← 上一月</button>
+        <button id="next-month" class="mini">下一月 →</button>
+        <span class="hint" id="log-total"></span>
+      </div>
+    </div>
+    <div class="table-scroll">
+      <table id="log-table">
+        <thead><tr>
+          <th class="ta-l">运行时间</th><th class="ta-l">状态</th><th>模式</th>
+          <th>行情日</th><th class="ta-l">关键指标</th><th class="ta-l">警告 / 错误</th>
+        </tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </section>
+
+  <footer class="disclaimer">
+    <p class="muted">每次采集(含非交易日心跳)都会记录一条。状态：✅ 正常 / ⚠️ 警告 / ❌ 异常。数据源：上交所、深交所、新浪财经、东方财富。</p>
+  </footer>
+</main>
+
+<script src="js/logs.js"></script>
+</body>
+</html>

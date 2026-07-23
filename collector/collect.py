@@ -126,6 +126,17 @@ def write_status(trade_date, num_nt_etfs=None, num_industries=None,
     recent = ([latest] + prev.get("recent", []))[:20]
     write_json(os.path.join(C.DATA_DIR, "status.json"),
                {"latest": latest, "recent": recent})
+
+    # 全量运行日志：按月分片累积（供日志页分页浏览，全部保留）
+    month = datetime.now(CN_TZ).strftime("%Y-%m")
+    mfile = os.path.join(C.RUNS_DIR, f"{month}.json")
+    marr = read_json(mfile, []) or []
+    marr.append(latest)
+    write_json(mfile, marr, quiet=True)
+    idx = read_json(os.path.join(C.RUNS_DIR, "index.json"), {}) or {}
+    months = sorted(set(idx.get("months", []) + [month]), reverse=True)
+    write_json(os.path.join(C.RUNS_DIR, "index.json"),
+               {"months": months, "total": idx.get("total", 0) + 1}, quiet=True)
     return level
 
 
@@ -486,60 +497,34 @@ def backfill_share_history(etfs, trade_date, start_date):
 # ==================================================================
 # 5b. 历史报告期国家队持仓（半年一个点，供持仓比例/份额走势）
 # ==================================================================
-def build_holder_periods(etfs):
-    """
-    爬每只国家队 ETF 的所有历史报告期十大持有人，按行业聚合成半年序列。
-    产出 {periods:[...], industries:{ind:{nt_amount,nt_ratio,report_share,num_etfs}}}。
-    行业分类沿用当前分类（行业属性稳定）。
-    """
-    from collections import defaultdict
-    ind_of = {r["code"]: r["industry"] for r in etfs}
-    codes = [r["code"] for r in etfs]
-    log.info("爬取 %d 只国家队 ETF 的全部历史报告期持有人...", len(codes))
+def _scan_nt_periods(code):
+    """扫一只 ETF 的所有报告期，返回 {period: (nt_amount, nt_ratio, report_share)}。"""
+    dates = S.fetch_report_dates(code)
+    if C.HOLDER_HISTORY_MAX_PERIODS:
+        dates = dates[:C.HOLDER_HISTORY_MAX_PERIODS]
+    out = {}
+    for d in dates:
+        hs = S.fetch_holders(code, d)
+        amt = sum(h["amount"] for h in hs if is_nt_holder(h["name"]))
+        rat = sum(h["ratio"] for h in hs if is_nt_holder(h["name"]))
+        if amt > 0 and rat > 0:
+            out[d] = (amt, rat, amt / (rat / 100))
+        time.sleep(random.uniform(0, C.SCAN_DELAY))
+    return out
 
-    # code -> {period: (nt_amount, nt_ratio, report_share)}
-    per_code = {}
 
-    def one(code):
-        dates = S.fetch_report_dates(code)
-        if C.HOLDER_HISTORY_MAX_PERIODS:
-            dates = dates[:C.HOLDER_HISTORY_MAX_PERIODS]
-        out = {}
-        for d in dates:
-            hs = S.fetch_holders(code, d)
-            amt = sum(h["amount"] for h in hs if is_nt_holder(h["name"]))
-            rat = sum(h["ratio"] for h in hs if is_nt_holder(h["name"]))
-            if amt > 0 and rat > 0:
-                out[d] = (amt, rat, amt / (rat / 100))
-            time.sleep(random.uniform(0, C.SCAN_DELAY))
-        return code, out
-
-    name_of = {r["code"]: r["name"] for r in etfs}
-    done = 0
-    with ThreadPoolExecutor(max_workers=C.SCAN_WORKERS) as ex:
-        futs = {ex.submit(one, c): c for c in codes}
-        for fut in as_completed(futs):
-            done += 1
-            code, out = fut.result()
-            per_code[code] = out
-            if done % 20 == 0 or done == len(codes):
-                log.info("  报告期进度 %d/%d", done, len(codes))
-
-    # ① 持久化每只 ETF 各报告期持仓到 holders/etf/<code>.json（永久留存，
-    #    即使日后退出国家队也不删 → 支撑“点位准确”聚合）
+def _persist_etf_holder_record(code, name, industry, per):
+    """持久化一只 ETF 的分期国家队持仓到 holders/etf/<code>.json（永久留存）。"""
     os.makedirs(C.HOLDERS_ETF_DIR, exist_ok=True)
-    for code, per in per_code.items():
-        if not per:
-            continue
-        write_json(os.path.join(C.HOLDERS_ETF_DIR, f"{code}.json"), {
-            "code": code, "name": name_of.get(code, ""),
-            "industry": ind_of.get(code, "其他主题"),
-            "periods": {d: [round(a), round(rt, 2), round(rs)]
-                        for d, (a, rt, rs) in per.items()},
-        }, quiet=True)
+    write_json(os.path.join(C.HOLDERS_ETF_DIR, f"{code}.json"), {
+        "code": code, "name": name, "industry": industry,
+        "periods": {d: [round(a), round(rt, 2), round(rs)]
+                    for d, (a, rt, rs) in per.items()},
+    }, quiet=True)
 
-    # ② 从**所有**已持久化记录（在册 + 已退出）做点位准确聚合：
-    #    每一期只计入“当期确实持有国家队”的 ETF（其记录里含该期即算持有）
+
+def _aggregate_periods_from_disk():
+    """从**所有**已持久化记录（在册 + 已退出）做点位准确聚合。"""
     from collections import defaultdict
     agg = defaultdict(lambda: defaultdict(lambda: [0.0, 0.0, 0]))  # ind->period->[amt,rshare,cnt]
     all_periods = set()
@@ -554,7 +539,6 @@ def build_holder_periods(etfs):
                 all_periods.add(d)
                 cell = agg[ind][d]
                 cell[0] += amt; cell[1] += rshare; cell[2] += 1
-
     periods = sorted(all_periods)
     industries = {}
     for ind, pmap in agg.items():
@@ -569,8 +553,80 @@ def build_holder_periods(etfs):
                 nt_amount.append(None); nt_ratio.append(None); num.append(None)
         industries[ind] = {"nt_amount": nt_amount, "nt_ratio": nt_ratio,
                            "num_etfs": num}
-    log.info("历史报告期聚合(点位准确,含已退出):%d 期 × %d 行业", len(periods), len(industries))
     return {"periods": periods, "industries": industries}
+
+
+def build_holder_periods(etfs):
+    """
+    爬当前国家队 ETF 的所有历史报告期持有人，持久化后做点位准确聚合。
+    产出 {periods:[...], industries:{ind:{nt_amount,nt_ratio,num_etfs}}}。
+    """
+    ind_of = {r["code"]: r["industry"] for r in etfs}
+    name_of = {r["code"]: r["name"] for r in etfs}
+    codes = [r["code"] for r in etfs]
+    log.info("爬取 %d 只国家队 ETF 的全部历史报告期持有人...", len(codes))
+    done = 0
+    with ThreadPoolExecutor(max_workers=C.SCAN_WORKERS) as ex:
+        futs = {ex.submit(_scan_nt_periods, c): c for c in codes}
+        for fut in as_completed(futs):
+            done += 1
+            code = futs[fut]
+            try:
+                per = fut.result()
+            except Exception:  # noqa
+                per = {}
+            if per:
+                _persist_etf_holder_record(code, name_of.get(code, ""),
+                                           ind_of.get(code, "其他主题"), per)
+            if done % 20 == 0 or done == len(codes):
+                log.info("  报告期进度 %d/%d", done, len(codes))
+    hp = _aggregate_periods_from_disk()
+    log.info("历史报告期聚合(点位准确,含已退出):%d 期 × %d 行业",
+             len(hp["periods"]), len(hp["industries"]))
+    return hp
+
+
+def run_deep_history():
+    """
+    深度历史回补：扫描**全市场** ETF 的历史报告期，把"曾经是国家队、现已退出但
+    仍上市"的 ETF 历史持仓也补进 holders/etf/，再重建 holders/periods.json。
+    一次性操作，耗时较长（全市场 × 各报告期）。
+    """
+    t0 = time.time()
+    run_start("deep")
+    log.info("===== 深度历史回补（全市场历史国家队 ETF）%s =====", now_cn())
+    trade_date, master = build_etf_master()
+    if not master or not trade_date:
+        run_err("无法获取全市场列表，终止（不写盘）")
+        write_status(trade_date)
+        return False
+    codes = list(master.keys())
+    log.info("扫描全市场 %d 只 ETF 的历史报告期国家队持仓（较慢，请耐心）...", len(codes))
+    done = found = 0
+    with ThreadPoolExecutor(max_workers=C.SCAN_WORKERS) as ex:
+        futs = {ex.submit(_scan_nt_periods, c): c for c in codes}
+        for fut in as_completed(futs):
+            done += 1
+            code = futs[fut]
+            try:
+                per = fut.result()
+            except Exception:  # noqa
+                per = {}
+            if per:
+                info = master.get(code, {})
+                ind = classify(info.get("name", ""), info.get("index_name", ""))
+                _persist_etf_holder_record(code, info.get("name", ""), ind, per)
+                found += 1
+            if done % 100 == 0 or done == len(codes):
+                log.info("  全市场扫描 %d/%d，累计历史国家队 ETF %d 只", done, len(codes), found)
+    hp = _aggregate_periods_from_disk()
+    write_json(os.path.join(C.HOLDERS_DIR, "periods.json"), hp)
+    RUN["stats"]["deep_found"] = found
+    RUN["stats"]["deep_scanned"] = len(codes)
+    write_status(trade_date, num_industries=len(hp["industries"]))
+    log.info("===== 深度回补完成，用时 %.0fs：历史国家队 ETF %d 只、%d 期 =====",
+             time.time() - t0, found, len(hp["periods"]))
+    return True
 
 
 # ==================================================================

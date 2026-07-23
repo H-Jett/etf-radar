@@ -30,7 +30,19 @@ def main():
                     help="起始日 YYYY-MM-DD（默认 config.DEFAULT_START_DATE）")
     ap.add_argument("--no-holder-history", action="store_true",
                     help="跳过历史报告期持有人爬取")
+    ap.add_argument("--deep-history", action="store_true",
+                    help="深度历史回补：扫描全市场历史报告期，补齐已退出但仍上市的历史国家队 ETF")
     args = ap.parse_args()
+
+    if args.deep_history:
+        try:
+            ok = collect.run_deep_history()
+            sys.exit(0 if ok else 1)
+        except KeyboardInterrupt:
+            log.warning("用户中断"); sys.exit(130)
+        except Exception as e:  # noqa
+            collect.write_run_error("深度回补异常：%s: %s" % (type(e).__name__, e))
+            log.exception("深度回补异常"); sys.exit(1)
 
     if args.start:
         try:
