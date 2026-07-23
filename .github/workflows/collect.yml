@@ -61,8 +61,11 @@ jobs:
           git config user.name  "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add docs/data
-          if git diff --cached --quiet; then
-            echo "数据无变化，跳过提交"
+          # B5: meta.json 含秒级时间戳每次必变；仅当 meta 以外的数据真的变了才提交，
+          #     避免非交易日产生“只改时间戳”的空提交。
+          if git diff --cached --quiet -- docs/data ':(exclude)docs/data/meta.json'; then
+            echo "数据无实质变化（仅时间戳），跳过提交"
+            git reset -q
           else
             TS=$(TZ='Asia/Shanghai' date '+%Y-%m-%d %H:%M')
             git commit -m "chore(data): 自动更新国家队 ETF 数据 ${TS} (北京时间)"
