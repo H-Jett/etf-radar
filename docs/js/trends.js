@@ -77,13 +77,18 @@ function aggSeries(dates,vals,p){
 
 function currentData(){
   if(METRIC==='share'){
-    const out={x:null,inds:{},unit:'份',fmt:yi};
-    let x=null;
+    const out={x:[],inds:{},unit:'份',fmt:yi};
+    // 统一桶轴：所有行业共用同一条时间轴（从全部日期建桶，取每桶最后一个交易日为代表），
+    // 各行业按桶映射，未上市时段为 null（connectNulls）。避免各行业各自聚合导致 X 轴错位。
+    const bm=new Map();
+    DAILY.dates.forEach((d,i)=>bm.set(bucketKey(d,PERIOD),i)); // 同桶后者覆盖 → 桶内最后一日
+    const keys=[...bm.keys()].sort();
+    const repIdx=keys.map(k=>bm.get(k));
+    out.x=repIdx.map(i=>DAILY.dates[i]);
     for(const[ind,vals]of Object.entries(DAILY.industries)){
-      const a=aggSeries(DAILY.dates,vals,PERIOD);
-      x=a.labels; out.inds[ind]=a.vals;
+      out.inds[ind]=repIdx.map(i=>(vals[i]==null?null:vals[i]));
     }
-    out.x=x||[]; return out;
+    return out;
   }
   const key=METRIC==='ratio'?'nt_ratio':'nt_amount';
   const out={x:PERIODS.periods,inds:{},unit:METRIC==='ratio'?'%':'份',

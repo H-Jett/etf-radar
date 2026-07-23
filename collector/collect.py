@@ -101,20 +101,23 @@ def load_existing_series(code):
     return prices, shares
 
 
-def existing_share_dates():
-    """所有 series 分片里已出现过的份额日期集合（用于份额增量补缺）。"""
-    dates = set()
+def existing_share_dates_by_code():
+    """返回 {code: set(已有份额日期)}。份额增量补缺按**每只 ETF**判断，
+    避免新晋成员因日期在别的 ETF 里存在而被整体跳过（否则新成员无历史）。"""
+    by_code = {}
     if not os.path.isdir(C.SERIES_DIR):
-        return dates
+        return by_code
     for code in os.listdir(C.SERIES_DIR):
         d = os.path.join(C.SERIES_DIR, code)
         if not os.path.isdir(d):
             continue
+        s = set()
         for fn in os.listdir(d):
             if fn.endswith(".json"):
                 for dt, _ in read_json(os.path.join(d, fn), {}).get("shares", []):
-                    dates.add(dt)
-    return dates
+                    s.add(dt)
+        by_code[code] = s
+    return by_code
 
 
 def write_series_sharded(code, prices, shares):
@@ -342,22 +345,26 @@ def backfill_share_history(etfs, trade_date, start_date):
 
     end = datetime.strptime(trade_date, "%Y-%m-%d").date()
     start = datetime.strptime(start_date, "%Y-%m-%d").date()
-    already = existing_share_dates()          # 已有份额日期 → 跳过，增量补缺
-    lo = min(already) if already else None     # 已覆盖区间 [lo, hi]
-    hi = max(already) if already else None
+    by_code = existing_share_dates_by_code()          # {code: set(已有日期)}
+    all_dates = set().union(*by_code.values()) if by_code else set()  # 已知交易日
+    lo = min(all_dates) if all_dates else None
+    hi = max(all_dates) if all_dates else None
+    empty = set()
     todo = []
     d = end
     while d >= start:
         ds = d.strftime("%Y-%m-%d")
-        # 已覆盖区间整体跳过（区间内交易日均已存在，非交易日无需再请求）
-        if already and lo <= ds <= hi:
-            d -= timedelta(days=1)
-            continue
-        if ds not in already:
+        if all_dates and lo <= ds <= hi:
+            # 已覆盖区间内：只补“已知交易日且某个成员缺失”的（新成员/历史空洞），
+            # 非交易日（不在 all_dates）跳过，避免重复请求周末/节假日
+            if ds in all_dates and any(ds not in by_code.get(c, empty) for c in sh_codes):
+                todo.append(ds)
+        else:
+            # 区间两端（更早/更新）：直接抓以发现新交易日
             todo.append(ds)
         d -= timedelta(days=1)
-    log.info("回补上交所份额：%d 只 ETF，%s→%s，需补 %d 天（已有 %d 天跳过）...",
-             len(sh_codes), start_date, trade_date, len(todo), len(already))
+    log.info("回补上交所份额：%d 只 ETF，%s→%s，需补 %d 天（已知交易日 %d）...",
+             len(sh_codes), start_date, trade_date, len(todo), len(all_dates))
 
     def fetch_day(ds):
         data = S.fetch_sse_shares(ds)
@@ -485,11 +492,12 @@ def build_industry_timeseries(etfs, price_series, share_hist):
     dates = sorted(all_dates)
     if not dates:
         return {"dates": [], "industries": {}, "note": "暂无份额历史"}
-    min_pts = max(5, int(0.5 * len(dates)))
 
+    # 含任一份额点即纳入（与 industries.json / industry bundles 口径一致，
+    # 避免同一行业在不同页面忽有忽无）。深市成员通常只有当前 1 点。
     ind_members = defaultdict(list)
     for r in etfs:
-        if len(share_map.get(r["code"], {})) >= min_pts:
+        if len(share_map.get(r["code"], {})) >= 1:
             ind_members[r["industry"]].append(r)
 
     out = {}
@@ -518,7 +526,7 @@ def build_industry_bundles(etfs, share_hist):
     share_map = {c: dict(s) for c, s in share_hist.items()}
     members = defaultdict(list)
     for r in etfs:
-        if len(share_map.get(r["code"], {})) >= 5:      # 需有份额历史
+        if len(share_map.get(r["code"], {})) >= 1:      # 含任一份额点即纳入（口径统一）
             members[r["industry"]].append(r)
 
     # 用固定行业顺序分配 id（避免按价格/市值排序导致 id 每日漂移、文件全量改写）
@@ -638,8 +646,9 @@ def run_init(start_date=None, no_holder_history=False):
     beg = start_date.replace("-", "")
     log.info("===== 初始化/全量采集开始 %s（起始 %s）=====", now_cn(), start_date)
     trade_date, master = build_etf_master()
-    if not master:
-        log.error("未获取到 ETF 基础数据，终止（不写盘，保护既有数据）")
+    if not master or not trade_date:
+        log.error("未获取到 ETF 基础数据或交易日（trade_date=%s），终止（不写盘，保护既有数据）",
+                  trade_date)
         return False
 
     candidates = find_candidates(list(master.keys()))
@@ -707,8 +716,9 @@ def run_daily(no_report_check=False):
         return run_init()
 
     trade_date, master = build_etf_master()
-    if not master:
-        log.error("未获取到当日行情 → 跳过本次（不写盘，保护既有数据）")
+    if not master or not trade_date:
+        log.error("未获取到当日行情或交易日（trade_date=%s）→ 跳过本次（不写盘，保护既有数据）",
+                  trade_date)
         return False
     etf_map = {r["code"]: r for r in old_etfs}
     for code, r in etf_map.items():
