@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>ETF 详情 · 行业国家队看板</title>
 <link rel="stylesheet" href="css/style.css">
-<script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
+<script src="js/vendor/echarts.min.js"></script>
 </head>
 <body>
 <header class="topbar">
@@ -35,7 +35,7 @@
     </div>
     <div id="detail-head" class="detail-head"></div>
     <div id="chart" class="chart" style="height:420px"></div>
-    <p class="muted" style="margin:4px 2px 0">提示：拖动图表底部的滑块可查看不同时间段；左轴为单位净值，右轴为总份额（亿份）。</p>
+    <p class="muted" style="margin:4px 2px 0">提示：拖动底部滑块查看不同时段。左轴为<b>每日收盘价</b>（新浪日 K 收盘价，二级市场价格，≈单位净值但不完全相等，仅近约 1 年）；右轴为<b>总份额</b>（亿份，最长约 10 年）。</p>
   </section>
 
   <section class="card">

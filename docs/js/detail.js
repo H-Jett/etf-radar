@@ -98,13 +98,11 @@ function renderChart(){
   const px=CUR._px||{};
   const price=aggregate(px.prices,PERIOD);
   const share=aggregate(px.shares,PERIOD);
-  // 以价格日期为主轴，份额对齐到同一桶
+  // x 轴取价格与份额日期的并集，份额可完整显示（收盘价仅近约1年，缺处留空）
   const shareMap=new Map();
   (share.keys||[]).forEach((k,i)=>shareMap.set(k,share.v[i]));
-  const xkeys=price.keys&&price.keys.length?price.keys:(share.keys||[]);
-  const xLabels=xkeys.map(k=>{ // 用桶内代表日期做标签
-    return k;
-  });
+  const xkeys=[...new Set([...(price.keys||[]),...(share.keys||[])])].sort();
+  const xLabels=xkeys;
   const priceMap=new Map();(price.keys||[]).forEach((k,i)=>priceMap.set(k,price.v[i]));
   const priceVals=xkeys.map(k=>priceMap.has(k)?priceMap.get(k):null);
   const shareVals=xkeys.map(k=>shareMap.has(k)?shareMap.get(k)/1e8:null); // 亿份
@@ -113,15 +111,15 @@ function renderChart(){
   CHART.setOption({
     animationDuration:400,
     grid:{left:52,right:60,top:24,bottom:64},
-    legend:{data:['单位净值','总份额'],top:0,right:0},
+    legend:{data:['收盘价','总份额'],top:0,right:0},
     tooltip:{trigger:'axis',
       formatter:ps=>{let s=ps[0].axisValue+'<br/>';
-        ps.forEach(p=>{const val=p.seriesName==='总份额'?(p.value!=null?p.value.toFixed(2)+'亿份':'—'):(p.value!=null?p.value:'—');
+        ps.forEach(p=>{const val=p.seriesName==='总份额'?(p.value!=null?p.value.toFixed(2)+'亿份':'—'):(p.value!=null?p.value+' 元':'—');
           s+=`${p.marker}${p.seriesName}：<b>${val}</b><br/>`;});return s;}},
     xAxis:{type:'category',data:xLabels,boundaryGap:PERIOD!=='D',
       axisLabel:{fontSize:11},axisTick:{alignWithLabel:true}},
     yAxis:[
-      {type:'value',name:'净值',scale:true,splitLine:{lineStyle:{color:'#eef1f6'}},
+      {type:'value',name:'收盘价(元)',scale:true,splitLine:{lineStyle:{color:'#eef1f6'}},
        axisLabel:{fontSize:11}},
       {type:'value',name:'份额(亿)',position:'right',splitLine:{show:false},
        axisLabel:{fontSize:11,formatter:v=>v}},
@@ -131,7 +129,7 @@ function renderChart(){
       {type:'inside',start:startPct,end:100},
     ],
     series:[
-      {name:'单位净值',type:'line',smooth:true,showSymbol:false,yAxisIndex:0,
+      {name:'收盘价',type:'line',smooth:true,showSymbol:false,yAxisIndex:0,
        lineStyle:{width:2,color:'#c8102e'},itemStyle:{color:'#c8102e'},
        areaStyle:{color:'rgba(200,16,46,.06)'},connectNulls:true,data:priceVals},
       {name:'总份额',type:'bar',yAxisIndex:1,itemStyle:{color:'rgba(43,108,176,.55)'},
