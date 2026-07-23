@@ -104,11 +104,11 @@ function renderChart(){
   const names=['总量',...etfs.map(e=>`${e.name}(${e.code})`)];
   if(!LEGEND_SEL){ LEGEND_SEL={}; names.forEach(n=>LEGEND_SEL[n]=true); }
   const series=[
-    {name:'总量',type:'line',smooth:true,showSymbol:false,z:10,
+    {name:'总量',type:'line',smooth:true,showSymbol:false,z:10,sampling:'lttb',
      lineStyle:{width:3,color:'#c8102e'},itemStyle:{color:'#c8102e'},
      areaStyle:{color:'rgba(200,16,46,.05)'},connectNulls:true,data:pick(CUR.total)},
     ...etfs.map((e,i)=>({name:`${e.name}(${e.code})`,type:'line',smooth:true,
-     showSymbol:false,connectNulls:true,
+     showSymbol:false,connectNulls:true,sampling:'lttb',
      lineStyle:{width:1.5,color:IND_COLORS[i%IND_COLORS.length]},
      itemStyle:{color:IND_COLORS[i%IND_COLORS.length]},data:pick(e.shares)})),
   ];

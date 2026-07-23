@@ -51,6 +51,13 @@ def setup_logging():
 log = logging.getLogger("collect")
 
 
+def init_logging():
+    """入口脚本调用：配置并绑定模块级 logger。"""
+    global log
+    log = setup_logging()
+    return log
+
+
 def now_cn():
     return datetime.now(CN_TZ).strftime("%Y-%m-%d %H:%M:%S")
 
@@ -277,17 +284,16 @@ def collect_nt_etfs(candidates, master):
 # ==================================================================
 # 4. 价格采集（回填 close / nt_value，并写时间序列）
 # ==================================================================
-def collect_prices(etfs):
-    log.info("采集 %d 只 ETF 价格时间序列...", len(etfs))
+def collect_prices(etfs, beg="0"):
+    """采集收盘价序列（东方财富全历史，与份额同期）。beg='YYYYMMDD' 或 '0'。"""
+    log.info("采集 %d 只 ETF 收盘价（东财，beg=%s）...", len(etfs), beg)
 
     def one(rec):
-        kl = S.fetch_kline(rec["code"], datalen=C.PRICE_DAYS)
+        series = S.fetch_kline_em(rec["code"], rec["exchange"], beg=beg)
         time.sleep(random.uniform(0, C.SCAN_DELAY))
-        if not kl:
+        if not series:
             return rec["code"], None, []
-        close = float(kl[-1]["close"])
-        series = [[k["day"], float(k["close"])] for k in kl]
-        return rec["code"], close, series
+        return rec["code"], series[-1][1], series
 
     price_series = {}
     with ThreadPoolExecutor(max_workers=C.PRICE_WORKERS) as ex:
@@ -327,21 +333,31 @@ def write_series_files(etfs, price_series, share_hist):
 # ==================================================================
 # 5. 份额历史（上交所逐日回补，约 10 年；并发 + 增量补缺）
 # ==================================================================
-def backfill_share_history(etfs, trade_date, calendar_days):
+def backfill_share_history(etfs, trade_date, start_date):
+    """上交所逐日份额回补，从 start_date 到 trade_date；增量跳过已有日期。"""
     sh_codes = {r["code"] for r in etfs if r["exchange"] == "sh"}
     hist = {r["code"]: [] for r in etfs}
     if not sh_codes:
         return hist
 
     end = datetime.strptime(trade_date, "%Y-%m-%d").date()
+    start = datetime.strptime(start_date, "%Y-%m-%d").date()
     already = existing_share_dates()          # 已有份额日期 → 跳过，增量补缺
+    lo = min(already) if already else None     # 已覆盖区间 [lo, hi]
+    hi = max(already) if already else None
     todo = []
-    for i in range(calendar_days):
-        ds = (end - timedelta(days=i)).strftime("%Y-%m-%d")
+    d = end
+    while d >= start:
+        ds = d.strftime("%Y-%m-%d")
+        # 已覆盖区间整体跳过（区间内交易日均已存在，非交易日无需再请求）
+        if already and lo <= ds <= hi:
+            d -= timedelta(days=1)
+            continue
         if ds not in already:
             todo.append(ds)
-    log.info("回补上交所份额：%d 只 ETF，范围约 %d 天，需补 %d 天（已有 %d 天跳过）...",
-             len(sh_codes), calendar_days, len(todo), len(already))
+        d -= timedelta(days=1)
+    log.info("回补上交所份额：%d 只 ETF，%s→%s，需补 %d 天（已有 %d 天跳过）...",
+             len(sh_codes), start_date, trade_date, len(todo), len(already))
 
     def fetch_day(ds):
         data = S.fetch_sse_shares(ds)
@@ -609,29 +625,38 @@ def aggregate_industries(etfs):
 # ==================================================================
 # 7. 主流程
 # ==================================================================
-def run_full(args):
+def run_init(start_date=None, no_holder_history=False):
+    """
+    初始化 / 全量：扫描全市场识别国家队 ETF，回补自 start_date 起的份额与收盘价、
+    历史报告期持有人，重建全部快照与分片。
+
+    幂等且兼容已有数据：份额按日期增量补缺、收盘价按日期合并、分片合并已存，
+    不会重复或覆盖历史（相同内容不会产生新提交）。
+    """
     t0 = time.time()
-    log.info("===== 全量采集开始 %s =====", now_cn())
+    start_date = start_date or C.DEFAULT_START_DATE
+    beg = start_date.replace("-", "")
+    log.info("===== 初始化/全量采集开始 %s（起始 %s）=====", now_cn(), start_date)
     trade_date, master = build_etf_master()
     if not master:
-        log.error("未获取到 ETF 基础数据，终止")
-        return
+        log.error("未获取到 ETF 基础数据，终止（不写盘，保护既有数据）")
+        return False
 
     candidates = find_candidates(list(master.keys()))
     etfs = collect_nt_etfs(candidates, master)
     if not etfs:
-        log.error("未发现国家队 ETF，终止")
-        return
+        log.error("未发现国家队 ETF，终止（不写盘）")
+        return False
 
-    price_series = collect_prices(etfs)
-    share_hist = backfill_share_history(etfs, trade_date, C.SHARE_BACKFILL_CALENDAR_DAYS) \
-        if not args.no_backfill else {r["code"]: [] for r in etfs}
-    holder_periods = None if args.no_holder_history else build_holder_periods(etfs, master)
+    price_series = collect_prices(etfs, beg=beg)
+    share_hist = backfill_share_history(etfs, trade_date, start_date)
+    holder_periods = None if no_holder_history else build_holder_periods(etfs, master)
 
     industries = aggregate_industries(etfs)
     _write_all(trade_date, etfs, industries, price_series, share_hist, holder_periods)
-    log.info("===== 全量采集完成，用时 %.1fs，国家队 ETF %d 只、行业 %d 个 =====",
+    log.info("===== 初始化完成，用时 %.1fs，国家队 ETF %d 只、行业 %d 个 =====",
              time.time() - t0, len(etfs), len(industries))
+    return True
 
 
 def newer_report_available(universe, known_report_date):
@@ -660,43 +685,59 @@ def newer_report_available(universe, known_report_date):
     return False
 
 
-def run_daily(args):
-    """日更：复用已有 universe，仅刷新份额/价格并重新聚合；发现新报告期则升级全量。"""
+def run_daily(no_report_check=False):
+    """
+    每日增量：复用已有 universe，追加当日份额/收盘价并重新聚合。
+    - 无既有数据 → 自动回退初始化；
+    - 检测到新报告期 → 自动升级为初始化（重扫持有人、增量补数据）；
+    - 幂等：非交易日/重复运行不会产生重复点（按日期去重合并）。
+    """
     t0 = time.time()
-    log.info("===== 日更采集开始 %s =====", now_cn())
+    log.info("===== 每日增量采集开始 %s =====", now_cn())
     universe = read_json(os.path.join(C.DATA_DIR, "universe.json"))
     old_etfs = read_json(os.path.join(C.DATA_DIR, "etfs.json"))
     old_meta = read_json(os.path.join(C.DATA_DIR, "meta.json"), {})
     if not universe or not old_etfs:
-        log.warning("无 universe.json / etfs.json，回退全量")
-        return run_full(args)
+        log.warning("无 universe.json / etfs.json → 回退初始化")
+        return run_init()
 
-    # 半年报/年报检测：发布新报告期则自动升级为全量
-    if not args.no_report_check and \
+    if not no_report_check and \
             newer_report_available(universe, (old_meta or {}).get("report_date")):
-        return run_full(args)
+        log.info("检测到新报告期 → 升级为初始化（增量补数据、重扫持有人）")
+        return run_init()
 
     trade_date, master = build_etf_master()
+    if not master:
+        log.error("未获取到当日行情 → 跳过本次（不写盘，保护既有数据）")
+        return False
     etf_map = {r["code"]: r for r in old_etfs}
     for code, r in etf_map.items():
         if code in master:
             r["total_share"] = master[code]["share"]
 
     etfs = list(etf_map.values())
-    price_series = collect_prices(etfs)
-    # 从既有分片读回全量份额历史，并追加最新一日
-    share_hist = {}
+    # 收盘价只取近 60 天增量，按日期与既有合并（无需每天重拉全历史）
+    beg = (datetime.strptime(trade_date, "%Y-%m-%d").date()
+           - timedelta(days=60)).strftime("%Y%m%d")
+    new_prices = collect_prices(etfs, beg=beg)
+    price_series, share_hist = {}, {}
     for r in etfs:
-        _, old_s = load_existing_series(r["code"])
+        old_p, old_s = load_existing_series(r["code"])
+        for d, v in new_prices.get(r["code"], []):
+            old_p[d] = v                    # 收盘价按日期合并去重
         if r["total_share"]:
-            old_s[trade_date] = r["total_share"]
-        share_hist[r["code"]] = sorted(([d, v] for d, v in old_s.items()),
-                                       key=lambda x: x[0])
+            old_s[trade_date] = r["total_share"]   # 追加当日份额（同日覆盖，不重复）
+        price_series[r["code"]] = sorted(([d, v] for d, v in old_p.items()), key=lambda x: x[0])
+        share_hist[r["code"]] = sorted(([d, v] for d, v in old_s.items()), key=lambda x: x[0])
+        # 回填最新收盘价 / nt_value
+        if price_series[r["code"]]:
+            r["close"] = price_series[r["code"]][-1][1]
+            r["nt_value"] = (r["nt_amount"] * r["close"]) if r["close"] else None
 
     industries = aggregate_industries(etfs)
-    # 日更不重建历史报告期（半年才变），保留既有 holders/periods.json
     _write_all(trade_date, etfs, industries, price_series, share_hist, holder_periods=None)
-    log.info("===== 日更完成，用时 %.1fs =====", time.time() - t0)
+    log.info("===== 每日增量完成，用时 %.1fs =====", time.time() - t0)
+    return True
 
 
 def _write_all(trade_date, etfs, industries, price_series, share_hist,
@@ -706,11 +747,18 @@ def _write_all(trade_date, etfs, industries, price_series, share_hist,
 
     # 分片写逐 ETF 序列（合并已存 + 本轮），回填 rec['years']
     write_series_files(etfs, price_series, share_hist)
+    # 从合并后的分片读回**完整**序列，供行业聚合（增量模式下入参只含新数据，
+    # 必须用合并后的全量，否则行业时间序列/打包会缺历史）
+    full_price, full_share = {}, {}
+    for r in etfs:
+        p, s = load_existing_series(r["code"])
+        full_price[r["code"]] = sorted(([d, v] for d, v in p.items()), key=lambda x: x[0])
+        full_share[r["code"]] = sorted(([d, v] for d, v in s.items()), key=lambda x: x[0])
     # 行业日频总份额 -> 按年分片
-    ts = build_industry_timeseries(etfs, price_series, share_hist)
+    ts = build_industry_timeseries(etfs, full_price, full_share)
     trend_years = write_trends_sharded(ts)
     # 行业内各 ETF 份额打包（行业详情页用）
-    build_industry_bundles(etfs, share_hist)
+    build_industry_bundles(etfs, full_share)
     series_years = sorted({y for r in etfs for y in r.get("years", [])})
 
     rc = Counter(r["report_date"] for r in etfs if r["report_date"])
@@ -750,26 +798,5 @@ def _write_all(trade_date, etfs, industries, price_series, share_hist,
                 for r in etfs])
 
 
-def main():
-    global log
-    log = setup_logging()
-    ap = argparse.ArgumentParser(description="行业国家队 ETF 数据采集")
-    ap.add_argument("--full", action="store_true", help="全量扫描重建 universe")
-    ap.add_argument("--no-backfill", action="store_true",
-                    help="全量时跳过份额历史回补（更快）")
-    ap.add_argument("--no-report-check", action="store_true",
-                    help="日更时跳过新报告期检测")
-    ap.add_argument("--no-holder-history", action="store_true",
-                    help="全量时跳过历史报告期持有人爬取")
-    args = ap.parse_args()
-    try:
-        if args.full:
-            run_full(args)
-        else:
-            run_daily(args)
-    except KeyboardInterrupt:
-        log.warning("用户中断")
-
-
-if __name__ == "__main__":
-    main()
+# 入口见 init.py（初始化，可指定 --start）与 daily.py（每日增量）。
+# collect.py 仅作为共享库，提供 run_init() / run_daily() 及各采集函数。

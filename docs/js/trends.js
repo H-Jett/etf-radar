@@ -104,7 +104,7 @@ function render(){
 
   const series=order.map(ind=>({
     name:ind, type:'line', smooth:METRIC!=='share'?false:true, showSymbol:METRIC!=='share',
-    symbolSize:5, connectNulls:true, lineStyle:{width:2,color:colorFor[ind]},
+    symbolSize:5, connectNulls:true, sampling:'lttb', lineStyle:{width:2,color:colorFor[ind]},
     itemStyle:{color:colorFor[ind]}, data:D.inds[ind],
   }));
   const startPct=D.x.length>60?Math.round((1-60/D.x.length)*100):0;

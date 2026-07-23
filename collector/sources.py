@@ -198,6 +198,40 @@ def fetch_kline(code: str, datalen: int = 120):
 
 
 # ==================================================================
+# 东方财富 日 K（全历史，收盘价与份额可对齐；境外可达更稳）
+# ==================================================================
+_EM_KLINE_URL = "https://push2his.eastmoney.com/api/qt/stock/kline/get"
+
+
+def fetch_kline_em(code: str, exchange: str, beg: str = "0"):
+    """
+    东方财富全历史日 K。返回 [[date, close]...]（旧->新）。
+    beg: 起始日 'YYYYMMDD' 或 '0'（全历史）。exchange: 'sh'/'sz'。
+    """
+    secid = ("1." if exchange == "sh" else "0.") + code
+    params = {
+        "secid": secid, "fields1": "f1,f2,f3",
+        "fields2": "f51,f53",             # f51=日期, f53=收盘价（不复权）
+        "klt": "101", "fqt": "0", "beg": beg, "end": "20500101", "lmt": "1000000",
+    }
+    try:
+        r = requests.get(_EM_KLINE_URL, params=params,
+                         headers={"User-Agent": UA}, timeout=REQUEST_TIMEOUT)
+        klines = ((r.json() or {}).get("data") or {}).get("klines", []) or []
+    except Exception:  # noqa
+        return []
+    out = []
+    for row in klines:
+        parts = row.split(",")
+        if len(parts) >= 2:
+            try:
+                out.append([parts[0], float(parts[1])])
+            except ValueError:
+                continue
+    return out
+
+
+# ==================================================================
 # 底层：requests 优先，失败回退 curl（个别接口在某些网络下 requests 会被重置）
 # ==================================================================
 def _get_json_with_curl_fallback(url: str, headers: dict):

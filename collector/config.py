@@ -57,11 +57,12 @@ REQUEST_TIMEOUT = 20         # 单请求超时（秒）
 SCAN_WORKERS = 12            # 持有人扫描并发线程
 SCAN_DELAY = 0.15            # 每请求随机基准间隔（秒），防封
 PRICE_WORKERS = 10           # 价格采集并发
-PRICE_DAYS = 250             # 价格时间序列回溯交易日数（新浪K线，用于详情页）
-SHARE_BACKFILL_CALENDAR_DAYS = 3660   # 份额历史回补自然日数（约10年；增量补缺）
 SHARE_BACKFILL_WORKERS = 8   # 份额历史并发（对上交所温和一些）
 HOLDER_HISTORY_MAX_PERIODS = 0   # 历史报告期上限，0=尽可能全
 MAX_RETRIES = 3
+
+# 初始化默认起始日（init.py 可用 --start 覆盖）。份额与收盘价都从此日回补。
+DEFAULT_START_DATE = "2016-01-01"
 
 UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
       "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")

@@ -8,10 +8,14 @@ on:
   workflow_dispatch:
     inputs:
       mode:
-        description: "采集模式"
+        description: "采集模式：daily=每日增量；init=初始化/全量"
         type: choice
         default: daily
-        options: [daily, full]
+        options: [daily, init]
+      start:
+        description: "init 模式的起始日 YYYY-MM-DD（留空用默认）"
+        required: false
+        default: ""
 
 # 避免上一次未跑完又触发下一次
 concurrency:
@@ -39,12 +43,17 @@ jobs:
 
       - name: 运行采集
         run: |
-          if [ "${{ github.event.inputs.mode }}" = "full" ]; then
-            echo "手动全量采集"
-            python collector/collect.py --full
+          if [ "${{ github.event.inputs.mode }}" = "init" ]; then
+            if [ -n "${{ github.event.inputs.start }}" ]; then
+              echo "手动初始化：起始 ${{ github.event.inputs.start }}"
+              python collector/init.py --start "${{ github.event.inputs.start }}"
+            else
+              echo "手动初始化：默认起始"
+              python collector/init.py
+            fi
           else
-            # 日更：脚本内部会自动检测是否有新报告期，有则升级为全量
-            python collector/collect.py
+            # 每日增量：脚本内部会自动检测新报告期，有则自动升级初始化
+            python collector/daily.py
           fi
 
       - name: 提交数据变更
