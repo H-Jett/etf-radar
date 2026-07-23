@@ -128,8 +128,9 @@ function renderChart(){
   const zEnd=z?z.end:100;
   CHART.setOption({
     animationDuration:400,
-    grid:{left:58,right:20,top:8,bottom:76},
-    legend:{type:'scroll',bottom:44,data:names,selected:LEGEND_SEL,textStyle:{fontSize:11}},
+    // 图例移到顶部,给底部的 x 轴日期与滑块留出空间(避免图例挤占、挡住日期)
+    grid:{left:58,right:20,top:44,bottom:52},
+    legend:{type:'scroll',top:4,data:names,selected:LEGEND_SEL,textStyle:{fontSize:11}},
     tooltip:{trigger:'axis',
       formatter:ps=>{let s=ps[0].axisValue+'<br/>';
         ps.filter(p=>p.value!=null).sort((a,b)=>b.value-a.value).slice(0,15).forEach(p=>{
@@ -137,7 +138,7 @@ function renderChart(){
     xAxis:{type:'category',data:labels,boundaryGap:false,axisLabel:{fontSize:11}},
     yAxis:{type:'value',name:'份额(亿)',scale:false,splitLine:{lineStyle:{color:'#eef1f6'}},
       axisLabel:{fontSize:11}},
-    dataZoom:[{type:'slider',start:zStart,end:zEnd,height:18,bottom:20},
+    dataZoom:[{type:'slider',start:zStart,end:zEnd,height:16,bottom:12},
               {type:'inside',start:zStart,end:zEnd}],
     series,
   },true);

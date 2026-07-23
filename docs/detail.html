@@ -35,7 +35,7 @@
     <div class="line-tools">
       <button id="btn-all" class="mini">全选</button>
       <button id="btn-none" class="mini">仅总量</button>
-      <span class="hint">点击下方图例可单独显示/隐藏某只 ETF；<b>总量</b>为该行业所有成员份额之和</span>
+      <span class="hint">点击图例可单独显示/隐藏某只 ETF；<b>总量</b>为该行业所有成员份额之和</span>
     </div>
     <div id="chart" class="chart" style="height:460px"></div>
     <p class="muted" style="margin:4px 2px 0">拖动底部滑块查看不同时段；纵轴为份额（亿份），最长约 10 年。</p>
@@ -44,11 +44,12 @@
   <section class="card">
     <div class="chart-toolbar">
       <div class="tb-left">
-        <label class="tb-label">十大持有人</label>
+        <label class="tb-label">选择 ETF</label>
         <select id="holder-select" class="etf-select"></select>
       </div>
       <div class="tb-right"><span class="hint" id="holder-rpt"></span></div>
     </div>
+    <p class="muted" style="margin:0 2px 12px">以下为<b>所选单只 ETF</b>自己披露的十大持有人（每只基金各自披露，非行业汇总）。行业层面的国家队汇总见<a href="index.html">行业总览</a>与<a href="trends.html">行业走势</a>。</p>
 
     <h3 class="sub-h">国家队持有人</h3>
     <div class="table-scroll">
