@@ -12,8 +12,9 @@ import os
 # ------------------------------------------------------------------
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  # 项目根
 DATA_DIR = os.path.join(BASE_DIR, "docs", "data")          # 快照 JSON
-PRICE_DIR = os.path.join(DATA_DIR, "prices")               # 每只 ETF 的价格/份额时间序列
-HISTORY_DIR = os.path.join(DATA_DIR, "history")            # 行业/份额历史累积
+SERIES_DIR = os.path.join(DATA_DIR, "series")              # series/<code>/<year>.json 逐 ETF 逐年
+TRENDS_DIR = os.path.join(DATA_DIR, "trends")              # trends/<year>.json 各行业逐年日频
+HOLDERS_DIR = os.path.join(DATA_DIR, "holders")            # holders/periods.json 报告期序列
 LOG_DIR = os.path.join(BASE_DIR, "logs")
 
 # ------------------------------------------------------------------
@@ -55,8 +56,10 @@ REQUEST_TIMEOUT = 20         # 单请求超时（秒）
 SCAN_WORKERS = 12            # 持有人扫描并发线程
 SCAN_DELAY = 0.15            # 每请求随机基准间隔（秒），防封
 PRICE_WORKERS = 10           # 价格采集并发
-PRICE_DAYS = 120             # 价格/份额时间序列回溯天数
-SHARE_BACKFILL_DAYS = 90     # 首次运行时份额历史回溯的自然日数
+PRICE_DAYS = 250             # 价格时间序列回溯交易日数（新浪K线，用于详情页）
+SHARE_BACKFILL_CALENDAR_DAYS = 3660   # 份额历史回补自然日数（约10年；增量补缺）
+SHARE_BACKFILL_WORKERS = 8   # 份额历史并发（对上交所温和一些）
+HOLDER_HISTORY_MAX_PERIODS = 0   # 历史报告期上限，0=尽可能全
 MAX_RETRIES = 3
 
 UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "

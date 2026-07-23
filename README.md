@@ -31,41 +31,34 @@ etf-nt-industry/
 │   └── requirements.txt
 ├── docs/                     # ← GitHub Pages 根目录
 │   ├── index.html            # 行业总览
+│   ├── trends.html           # 行业走势（份额/持仓占比随时间，日/周/月）
 │   ├── detail.html           # ETF 详情 / 图表浏览器
 │   ├── css/style.css
-│   ├── js/{main,detail}.js
+│   ├── js/{main,trends,detail}.js
 │   └── data/                 # 自动生成的 JSON（由 Actions 提交）
-│       ├── meta.json         # 更新时间、报告期、总量统计
-│       ├── industries.json   # 各行业国家队汇总（首页核心）
-│       ├── etfs.json         # 各国家队 ETF 快照 + 十大持有人
-│       ├── universe.json     # 国家队 ETF 代码清单（日更复用）
-│       └── prices/<code>.json# 每只 ETF 的价格 / 份额时间序列
+│       ├── meta.json             # 更新时间、报告期、series_years、总量统计
+│       ├── industries.json       # 各行业国家队当前快照汇总（首页核心）
+│       ├── etfs.json             # 各国家队 ETF 快照 + 十大持有人 + years
+│       ├── universe.json         # 国家队 ETF 代码清单（日更复用）
+│       ├── series/<code>/<year>.json   # 每 ETF 每年日频 {prices,shares}
+│       ├── trends/<year>.json           # 各行业该年日频总份额
+│       └── holders/periods.json         # 各行业国家队持仓份额/占比 报告期序列
 └── .github/workflows/collect.yml
 ```
 
+**为什么按「ETF × 年份」「行业 × 年份」切分？** 份额是日频、往回补到约 10 年，若整只 ETF 存一个文件，每天提交都要重写整份大文件，git 历史会迅速膨胀。按年切分后，**每天只改「当年」那一小片**，旧年份分片永不再变，仓库保持精简、单文件都小。
+
 ## 📊 数据结构（JSON）
 
-`docs/data/industries.json` —— 数组，每个行业一项：
+`industries.json`（首页）—— 数组，每行业一项：`nt_amount`（国家队持有份额，报告期口径）、`nt_value`（≈份额×最新净值）、`nt_ratio`（份额加权平均占比%）、`amount_change`（较上期）、`new_entries`、`groups`（各机构份额）、`etfs`（成员）。
 
-```jsonc
-{
-  "industry": "宽基",
-  "num_etfs": 15,
-  "nt_amount": 3.1e11,        // 国家队持有份额合计（份，报告期口径）
-  "nt_amount_prev": 3.0e11,   // 上一报告期
-  "nt_value": 1.5e12,         // ≈ 持有份额 × 最新单位净值（元）
-  "nt_ratio": 81.8,           // 份额加权平均持有占比（%）
-  "amount_change": 6.3e8,     // 较上期份额变化
-  "amount_change_pct": 0.02,
-  "new_entries": 0,           // 本期新进国家队的 ETF 数
-  "groups": {"中央汇金": 6.4e10, "汇金资管": 5.7e10},
-  "etfs": [ { "code": "510300", "name": "300ETF", "nt_value": ..., "nt_ratio": ... } ]
-}
-```
+`etfs.json` —— 每只国家队 ETF：`nt_holders`（国家队持有人，带上期占比/新进/环比）、`all_holders`（完整十大）、`report_date`、`years`（有数据的年份）。
 
-`docs/data/etfs.json` —— 每只国家队 ETF 的快照，含 `nt_holders`（国家队持有人，带上期占比/新进）与 `all_holders`（完整十大持有人）。
+`series/<code>/<year>.json` —— `{"prices":[["2026-07-22",4.765],…], "shares":[["2026-07-22",2.4e10],…]}`，日频；前端按需加载该 ETF 各年份分片并按日/周/月聚合。
 
-`docs/data/prices/<code>.json` —— `{ "prices": [["2026-07-22", 4.765], ...], "shares": [["2026-07-22", 2.4e10], ...] }`，日频，前端按周/月聚合。
+`trends/<year>.json` —— `{"dates":[…], "industries":{"宽基":{"total_share":[…]}}}`，各行业当年日频总份额（行业走势页用）。
+
+`holders/periods.json` —— `{"periods":["2016-06-30",…,"2025-12-31"], "industries":{"宽基":{"nt_amount":[…],"nt_ratio":[…],"num_etfs":[…]}}}`，**半年一个点**的国家队持仓演变（尽可能回溯到各 ETF 成立）。
 
 ## 🚀 部署到 GitHub Pages（3 步）
 

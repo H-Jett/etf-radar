@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>行业走势 · 行业国家队 ETF 看板</title>
+<link rel="stylesheet" href="css/style.css">
+<script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
+</head>
+<body>
+<header class="topbar">
+  <div class="wrap">
+    <h1>🇨🇳 行业国家队 ETF 看板</h1>
+    <p class="sub">各行业份额 / 国家队持仓占比随时间变化</p>
+    <nav class="nav"><a href="index.html">行业总览</a><a href="trends.html" class="on">行业走势</a><a href="detail.html">ETF 详情</a></nav>
+  </div>
+</header>
+
+<main class="wrap">
+  <section class="card">
+    <div class="chart-toolbar">
+      <div class="tb-left">
+        <div class="seg" id="metric-seg">
+          <button data-m="share" class="active">行业总份额</button>
+          <button data-m="ratio">国家队持仓占比</button>
+          <button data-m="amount">国家队持仓份额</button>
+        </div>
+      </div>
+      <div class="tb-right">
+        <div class="seg" id="period-seg">
+          <button data-p="D" class="active">日</button>
+          <button data-p="W">周</button>
+          <button data-p="M">月</button>
+        </div>
+      </div>
+    </div>
+    <p id="metric-note" class="muted" style="margin:0 2px 10px"></p>
+    <div id="chart" class="chart" style="height:440px"></div>
+    <p class="muted" style="margin:4px 2px 0">拖动底部滑块查看不同时段；点击图例可显示/隐藏行业。</p>
+  </section>
+
+  <section class="card">
+    <div class="table-head">
+      <h2>数据表格</h2>
+      <span class="hint" id="table-hint"></span>
+    </div>
+    <div class="table-scroll">
+      <table id="trend-table"><thead></thead><tbody></tbody></table>
+    </div>
+  </section>
+
+  <footer class="disclaimer">
+    <p><b>口径说明：</b>「行业总份额」为该行业成员 ETF 每日总份额之和（<b>日频</b>，主要为上交所 ETF；深交所无逐日份额接口）。
+    「国家队持仓份额 / 占比」来自各期半年报 / 年报十大持有人，<b>半年一个数据点</b>，占比 = 国家队持有份额 ÷ 报告期该行业 ETF 总份额（份额加权）。</p>
+    <p class="muted">数据源：上交所、深交所、新浪财经。仅供研究参考，不构成投资建议。</p>
+  </footer>
+</main>
+
+<script src="js/trends.js"></script>
+</body>
+</html>

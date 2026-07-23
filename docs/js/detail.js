@@ -50,8 +50,13 @@ function bindPeriod(){
 
 async function load(code){
   CUR=ETFS.find(e=>e.code===code);
-  const px=await fetch(`data/prices/${code}.json`).then(r=>r.json()).catch(()=>({prices:[],shares:[]}));
-  CUR._px=px;
+  const years=(CUR&&CUR.years)||[];
+  const parts=await Promise.all(years.map(y=>
+    fetch(`data/series/${code}/${y}.json`).then(r=>r.json()).catch(()=>null)));
+  const prices=[],shares=[];
+  parts.filter(Boolean).forEach(p=>{prices.push(...(p.prices||[]));shares.push(...(p.shares||[]));});
+  prices.sort((a,b)=>a[0]<b[0]?-1:1); shares.sort((a,b)=>a[0]<b[0]?-1:1);
+  CUR._px={prices,shares};
   renderHead(); renderChart(); renderHolders();
 }
 

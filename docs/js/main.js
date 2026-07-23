@@ -17,7 +17,7 @@ function pct(v){ return v==null?'—':(v).toFixed(2)+'%'; }
 function signCls(v){ return v>0?'pos':(v<0?'neg':''); }
 function signStr(v,fmt){ if(v==null||v===0) return fmt(v); return (v>0?'+':'')+fmt(v); }
 
-let INDUSTRIES=[], sortKey='nt_value', sortDesc=true;
+let INDUSTRIES=[], META={}, sortKey='nt_value', sortDesc=true;
 
 async function boot(){
   try{
@@ -25,7 +25,9 @@ async function boot(){
       fetch('data/meta.json').then(r=>r.json()),
       fetch('data/industries.json').then(r=>r.json()),
     ]);
-    INDUSTRIES=industries;
+    INDUSTRIES=industries; META=meta;
+    const hint=document.querySelector('.table-head .hint');
+    if(hint) hint.innerHTML=`持仓口径：报告期 <b>${meta.report_date||'—'}</b>（十大持有人半年披露一次）· 点击任意行展开成员 ETF`;
     renderMeta(meta); renderStats(meta,industries);
     renderIndustryChart(industries); renderGroupChart(meta,industries);
     renderTable();

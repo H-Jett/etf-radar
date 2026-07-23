@@ -1,0 +1,156 @@
+/* ===== 行业走势：总份额(日频 日/周/月) + 国家队持仓份额/占比(报告期) ===== */
+const IND_COLORS = ['#c8102e','#e07b39','#2b6cb0','#1a9e5f','#8a56c2','#d4a017',
+  '#3aa0a0','#c2506e','#5b8c2a','#b5651d','#4a6fa5','#9c3848','#2f8f6b','#a06cd5',
+  '#c99a2e','#6b7280','#0e7490','#be123c','#7c3aed','#0891b2'];
+function yi(v){ if(v==null)return'—'; const a=Math.abs(v);
+  if(a>=1e12)return(v/1e12).toFixed(2)+'万亿'; if(a>=1e8)return(v/1e8).toFixed(1)+'亿';
+  if(a>=1e4)return(v/1e4).toFixed(1)+'万'; return(+v).toFixed(0);}
+function pct(v){return v==null?'—':(+v).toFixed(2)+'%';}
+
+let CHART, METRIC='share', PERIOD='D';
+let DAILY=null, PERIODS=null;   // 缓存
+
+async function boot(){
+  CHART=echarts.init(document.getElementById('chart'));
+  window.addEventListener('resize',()=>CHART.resize());
+  bindSeg('metric-seg','m',v=>{METRIC=v; onMetric(); render();});
+  bindSeg('period-seg','p',v=>{PERIOD=v; render();});
+  try{
+    const meta=await fetch('data/meta.json').then(r=>r.json());
+    await Promise.all([loadDaily(meta), loadPeriods()]);
+    onMetric(); render();
+  }catch(e){
+    document.getElementById('chart').innerHTML='<div class="loading">数据尚未生成或仍在采集中：'+e+'</div>';
+  }
+}
+
+function bindSeg(id,attr,cb){
+  document.querySelectorAll('#'+id+' button').forEach(b=>{
+    b.addEventListener('click',()=>{
+      document.querySelectorAll('#'+id+' button').forEach(x=>x.classList.remove('active'));
+      b.classList.add('active'); cb(b.dataset[attr]);
+    });
+  });
+}
+
+async function loadDaily(meta){
+  const years=(meta.series_years||[]).slice().sort();
+  const parts=await Promise.all(years.map(y=>
+    fetch('data/trends/'+y+'.json').then(r=>r.json()).catch(()=>null)));
+  const dates=[]; const inds={};
+  parts.filter(Boolean).forEach(p=>{
+    p.dates.forEach(d=>dates.push(d));
+    for(const[ind,s]of Object.entries(p.industries)){
+      (inds[ind]=inds[ind]||[]).push(...s.total_share);
+    }
+  });
+  DAILY={dates,industries:inds};
+}
+async function loadPeriods(){
+  PERIODS=await fetch('data/holders/periods.json').then(r=>r.json()).catch(()=>({periods:[],industries:{}}));
+}
+
+function onMetric(){
+  const showPeriod=METRIC==='share';
+  document.getElementById('period-seg').style.visibility=showPeriod?'visible':'hidden';
+  document.getElementById('metric-note').textContent=
+    METRIC==='share' ? '行业成员 ETF 每日总份额之和（日频，可切换日/周/月，拖动查看时段）'
+    : METRIC==='ratio' ? '国家队持有份额 ÷ 报告期行业 ETF 总份额（份额加权）· 半年一个点'
+    : '国家队在该行业各 ETF 的持有份额合计 · 半年一个点';
+}
+
+// —— 周期聚合（取桶内最后一个值）——
+function bucketKey(d,p){
+  if(p==='M')return d.slice(0,7);
+  if(p==='W'){const t=new Date(d);t.setHours(0,0,0,0);t.setDate(t.getDate()+3-((t.getDay()+6)%7));
+    const w1=new Date(t.getFullYear(),0,4);
+    const wn=1+Math.round(((t-w1)/864e5-3+((w1.getDay()+6)%7))/7);
+    return t.getFullYear()+'-W'+String(wn).padStart(2,'0');}
+  return d;
+}
+function aggSeries(dates,vals,p){
+  const m=new Map();
+  dates.forEach((d,i)=>{ if(vals[i]!=null) m.set(bucketKey(d,p),[d,vals[i]]); });
+  const keys=[...m.keys()].sort();
+  return {labels:keys.map(k=>m.get(k)[0]), vals:keys.map(k=>m.get(k)[1])};
+}
+
+function currentData(){
+  if(METRIC==='share'){
+    const out={x:null,inds:{},unit:'份',fmt:yi};
+    let x=null;
+    for(const[ind,vals]of Object.entries(DAILY.industries)){
+      const a=aggSeries(DAILY.dates,vals,PERIOD);
+      x=a.labels; out.inds[ind]=a.vals;
+    }
+    out.x=x||[]; return out;
+  }
+  const key=METRIC==='ratio'?'nt_ratio':'nt_amount';
+  const out={x:PERIODS.periods,inds:{},unit:METRIC==='ratio'?'%':'份',
+             fmt:METRIC==='ratio'?pct:yi};
+  for(const[ind,s]of Object.entries(PERIODS.industries)){
+    out.inds[ind]=s[key];
+  }
+  return out;
+}
+
+function latestVal(arr){ for(let i=arr.length-1;i>=0;i--) if(arr[i]!=null) return arr[i]; return -Infinity; }
+
+function render(){
+  const D=currentData();
+  const order=Object.keys(D.inds).sort((a,b)=>latestVal(D.inds[b])-latestVal(D.inds[a]));
+  const colorFor={}; order.forEach((ind,i)=>colorFor[ind]=IND_COLORS[i%IND_COLORS.length]);
+  const selected={}; order.forEach((ind,i)=>selected[ind]=i<8); // 默认显示前8
+
+  const series=order.map(ind=>({
+    name:ind, type:'line', smooth:METRIC!=='share'?false:true, showSymbol:METRIC!=='share',
+    symbolSize:5, connectNulls:true, lineStyle:{width:2,color:colorFor[ind]},
+    itemStyle:{color:colorFor[ind]}, data:D.inds[ind],
+  }));
+  const startPct=D.x.length>60?Math.round((1-60/D.x.length)*100):0;
+  CHART.setOption({
+    animationDuration:400,
+    grid:{left:60,right:24,top:12,bottom:70},
+    legend:{type:'scroll',top:0,data:order,selected,textStyle:{fontSize:11}},
+    tooltip:{trigger:'axis',
+      formatter:ps=>{let s=ps[0].axisValue+'<br/>';
+        ps.filter(p=>p.value!=null).sort((a,b)=>b.value-a.value).slice(0,12).forEach(p=>{
+          s+=`${p.marker}${p.seriesName}：<b>${METRIC==='ratio'?pct(p.value):yi(p.value)+D.unit}</b><br/>`;});
+        return s;}},
+    xAxis:{type:'category',data:D.x,boundaryGap:false,axisLabel:{fontSize:11}},
+    yAxis:{type:'value',scale:METRIC!=='share',
+      axisLabel:{fontSize:11,formatter:v=>METRIC==='ratio'?v+'%':yi(v)},
+      splitLine:{lineStyle:{color:'#eef1f6'}}},
+    dataZoom:[{type:'slider',start:startPct,end:100,height:20,bottom:28},
+              {type:'inside',start:startPct,end:100}],
+    series,
+  },true);
+  renderTable(D,order,colorFor);
+}
+
+function renderTable(D,order,colorFor){
+  // 取最近 ~14 个时间桶为列（最新在右）
+  const n=D.x.length, take=Math.min(14,n);
+  const cols=[]; for(let i=n-take;i<n;i++) cols.push(i);
+  const thead=document.querySelector('#trend-table thead');
+  thead.innerHTML='<tr><th class="ta-l">行业</th>'+
+    cols.map(i=>`<th>${D.x[i]}</th>`).join('')+'<th>区间变化</th></tr>';
+  const tb=document.querySelector('#trend-table tbody'); tb.innerHTML='';
+  order.forEach(ind=>{
+    const vals=D.inds[ind];
+    const first=vals[cols[0]], last=vals[cols[cols.length-1]];
+    let chg='—';
+    if(first!=null&&last!=null){
+      if(METRIC==='ratio'){const d=last-first;chg=`<span class="${d>0?'pos':(d<0?'neg':'')}">${d>0?'+':''}${d.toFixed(2)}pt</span>`;}
+      else{const d=first?(last-first)/first*100:null; chg=d==null?'—':`<span class="${d>0?'pos':(d<0?'neg':'')}">${d>0?'+':''}${d.toFixed(1)}%</span>`;}
+    }
+    tb.innerHTML+=`<tr><td class="ta-l"><span class="ind-name"><span class="dot" style="background:${colorFor[ind]}"></span>${ind}</span></td>`+
+      cols.map(i=>`<td>${vals[i]==null?'—':(METRIC==='ratio'?pct(vals[i]):yi(vals[i]))}</td>`).join('')+
+      `<td>${chg}</td></tr>`;
+  });
+  document.getElementById('table-hint').textContent=
+    (METRIC==='ratio'?'占比(%)':(METRIC==='share'?'总份额':'国家队持仓份额'))+
+    ' · 最近 '+take+' 个'+(METRIC==='share'?({D:'交易日',W:'周',M:'月'}[PERIOD]):'报告期');
+}
+
+boot();
