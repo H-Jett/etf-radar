@@ -65,17 +65,28 @@ jobs:
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          # 运行期间远端可能被其他推送领先(并发/手动提交) → 推送前先 rebase，并重试，避免 non-fast-forward 失败
+          push_data() {
+            for i in 1 2 3 4 5; do
+              if git fetch origin main && git rebase origin/main; then
+                if git push origin HEAD:main; then echo "推送成功(第 $i 次)"; return 0; fi
+              else
+                git rebase --abort 2>/dev/null || true
+              fi
+              echo "推送冲突/失败，重试 $i ..."; sleep $((i*3))
+            done
+            echo "::error::多次重试后仍推送失败"; return 1
+          }
           git add docs/data
           TS=$(TZ='Asia/Shanghai' date '+%Y-%m-%d %H:%M')
           # 实质数据 = 排除每次必变的 meta.json / status.json / runs/(日志)后是否有变化
-          if ! git diff --cached --quiet -- docs/data ':(exclude)docs/data/meta.json' ':(exclude)docs/data/status.json' ':(exclude)docs/data/runs/**'; then
-            # B5: 有真实数据变化 → 正常数据提交
-            git commit -m "chore(data): 自动更新国家队 ETF 数据 ${TS} (北京时间)"
-            git push
+          if ! git diff --cached --quiet -- docs/data ':(exclude)docs/data/meta.json' ':(exclude)docs/data/stock/meta.json' ':(exclude)docs/data/status.json' ':(exclude)docs/data/runs/**'; then
+            git commit -m "chore(data): 自动更新国家队数据 ${TS} (北京时间)"
+            push_data
           elif ! git diff --cached --quiet -- docs/data/status.json docs/data/runs; then
-            # 无数据变化(非交易日等) → 仅提交状态/日志心跳,便于网页展示当天采集情况
+            # 无实质数据变化(非交易日等) → 仅提交状态/日志心跳,便于网页展示当天采集情况
             git commit -m "chore(status): 采集状态心跳 ${TS} (无数据变化)"
-            git push
+            push_data
           else
             echo "无任何变化，跳过提交"
             git reset -q
