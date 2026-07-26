@@ -45,6 +45,57 @@ def exchange_prefix(code: str) -> str:
 # ==================================================================
 # 上交所份额
 # ==================================================================
+_SSE_SESSION = None
+
+
+def _sse_session():
+    """上交所对境外/无 cookie 请求会返回空体(反爬)。先访问主站拿 cookie 再查询，复用会话。"""
+    global _SSE_SESSION
+    if _SSE_SESSION is None:
+        s = requests.Session()
+        s.headers.update(_SSE_HEADERS)
+        try:
+            s.get("https://www.sse.com.cn/", timeout=REQUEST_TIMEOUT, verify=False)
+        except Exception:  # noqa
+            pass
+        _SSE_SESSION = s
+    return _SSE_SESSION
+
+
+def _sse_get_json(url: str):
+    """带 cookie 会话 + 重试 + curl(带 cookie) 兜底的上交所 GET；空体视为失败并重试。"""
+    global _SSE_SESSION
+    sess = _sse_session()
+    last = None
+    for attempt in range(1, MAX_RETRIES + 2):
+        try:
+            r = sess.get(url, timeout=REQUEST_TIMEOUT, verify=False)
+            if r.text.strip():
+                return r.json()
+            last = "空响应体"
+        except Exception as e:  # noqa
+            last = e
+        if attempt == 2:  # 连续失败 → 重置会话(重新拿 cookie)
+            _SSE_SESSION = None
+            sess = _sse_session()
+        time.sleep(1.2 * attempt)
+    # curl 兜底(带上已拿到的 cookie)
+    try:
+        ck = "; ".join(f"{k}={v}" for k, v in sess.cookies.get_dict().items())
+        cmd = ["curl", "-s", "--max-time", str(REQUEST_TIMEOUT + 10),
+               "-H", f"User-Agent: {UA}", "-H", "Referer: https://www.sse.com.cn/"]
+        if ck:
+            cmd += ["-H", f"Cookie: {ck}"]
+        cmd.append(url)
+        out = subprocess.run(cmd, capture_output=True, timeout=REQUEST_TIMEOUT + 15)
+        if out.returncode == 0 and out.stdout.strip():
+            return json.loads(out.stdout.decode("utf-8", errors="replace"))
+    except Exception as e:  # noqa
+        last = e
+    log.warning("上交所请求失败（含 curl+cookie 兜底）：%s | %s", url[:80], last)
+    return {}
+
+
 def fetch_sse_shares(date_str: str) -> dict:
     """
     抓取某日全部上交所 ETF 份额。
@@ -52,7 +103,7 @@ def fetch_sse_shares(date_str: str) -> dict:
     返回 {code: {"name": str, "share": 份额(份)}}
     """
     url = SSE_SHARE_URL.format(date=date_str)
-    rows = _get_json_with_curl_fallback(url, _SSE_HEADERS)
+    rows = _sse_get_json(url)
     out = {}
     for item in (rows.get("result", []) if isinstance(rows, dict) else []):
         code = str(item.get("SEC_CODE", "")).strip()
