@@ -30,9 +30,11 @@ function render(){
     connectNulls:true,lineStyle:{width:2,color:colorFor[ind]},itemStyle:{color:colorFor[ind]},data:inds[ind]}));
   CHART.setOption({animationDuration:400,grid:{left:60,right:24,top:48,bottom:40},
     legend:{type:'scroll',top:8,data:order,selected:LEGEND_SEL,textStyle:{fontSize:11}},
-    tooltip:{trigger:'axis',formatter:ps=>{let s=ps[0].axisValue+'<br/>';
+    tooltip:{trigger:'axis',formatter:ps=>{let s=ps[0].axisValue+' <span style="color:#888;font-size:11px">（较上一时间点）</span><br/>';
       ps.filter(p=>p.value!=null).sort((a,b)=>b.value-a.value).slice(0,12).forEach(p=>{
-        s+=`${p.marker}${p.seriesName}：<b>${isRatio?pct(p.value):yi(p.value)+'元'}</b><br/>`;});return s;}},
+        const prev=prevNonNull(inds[p.seriesName]||[],p.dataIndex);
+        const dv=isRatio?deltaSpan(p.value,prev,v=>v.toFixed(2)+'pt',false):deltaSpan(p.value,prev,v=>yi(v)+'元',true);
+        s+=`${p.marker}${p.seriesName}：<b>${isRatio?pct(p.value):yi(p.value)+'元'}</b>${dv}<br/>`;});return s;}},
     xAxis:{type:'category',data:PERIODS.periods,boundaryGap:false,axisLabel:{fontSize:11}},
     yAxis:{type:'value',scale:isRatio,axisLabel:{fontSize:11,formatter:v=>isRatio?v+'%':yi(v)},splitLine:{lineStyle:{color:'#eef1f6'}}},
     series},true);
@@ -56,17 +58,23 @@ function renderTable(inds,order,colorFor){
     const f=sums[0],l=sums[sums.length-1];
     let chg='—'; if(f!=null&&l!=null&&f){const d=(l-f)/f*100;chg=`<span class="${d>0?'pos':(d<0?'neg':'')}">${d>0?'+':''}${d.toFixed(1)}%</span>`;}
     tb.innerHTML+=`<tr class="total-row"><td class="ta-l"><b>合计（全部行业）</b></td>`+
-      sums.map(v=>`<td><b>${v==null?'—':yi(v)}</b></td>`).join('')+`<td><b>${chg}</b></td></tr>`;
+      sums.map((v,k)=>v==null?'<td>—</td>':`<td><b>${yi(v)}</b>${(dv=>dv?'<br>'+dv:'')(deltaSpan(v,prevNonNull(sums,k),yi,true))}</td>`).join('')+
+      `<td><b>${chg}</b></td></tr>`;
   }
+  const isR=METRIC==='ratio';
   order.forEach(ind=>{
     const v=inds[ind], first=v[cols[0]], last=v[cols[cols.length-1]];
     let chg='—';
     if(first!=null&&last!=null){
-      if(METRIC==='ratio'){const d=last-first;chg=`<span class="${d>0?'pos':(d<0?'neg':'')}">${d>0?'+':''}${d.toFixed(2)}pt</span>`;}
+      if(isR){const d=last-first;chg=`<span class="${d>0?'pos':(d<0?'neg':'')}">${d>0?'+':''}${d.toFixed(2)}pt</span>`;}
       else{const d=first?(last-first)/first*100:null;chg=d==null?'—':`<span class="${d>0?'pos':(d<0?'neg':'')}">${d>0?'+':''}${d.toFixed(1)}%</span>`;}
     }
     tb.innerHTML+=`<tr><td class="ta-l"><span class="ind-name"><span class="dot" style="background:${colorFor[ind]}"></span>${ind}</span></td>`+
-      cols.map(i=>`<td>${v[i]==null?'—':(METRIC==='ratio'?pct(v[i]):yi(v[i]))}</td>`).join('')+`<td>${chg}</td></tr>`;
+      cols.map(i=>{
+        if(v[i]==null) return '<td>—</td>';
+        const val=isR?pct(v[i]):yi(v[i]);
+        const dv=isR?deltaSpan(v[i],prevNonNull(v,i),x=>x.toFixed(2)+'pt',false):deltaSpan(v[i],prevNonNull(v,i),yi,true);
+        return `<td>${val}${dv?'<br>'+dv:''}</td>`;}).join('')+`<td>${chg}</td></tr>`;
   });
   document.getElementById('table-hint').textContent=(METRIC==='ratio'?'平均持股占比':'国家队持股市值')+' · 最近 '+take+' 个报告期';
 }

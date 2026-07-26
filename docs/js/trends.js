@@ -114,9 +114,12 @@ function render(){
     grid:{left:60,right:24,top:48,bottom:70},
     legend:{type:'scroll',top:8,data:order,selected:LEGEND_SEL,textStyle:{fontSize:11}},
     tooltip:{trigger:'axis',
-      formatter:ps=>{let s=ps[0].axisValue+'<br/>';
+      formatter:ps=>{let s=ps[0].axisValue+' <span style="color:#888;font-size:11px">（较上一时间点）</span><br/>';
         ps.filter(p=>p.value!=null).sort((a,b)=>b.value-a.value).slice(0,12).forEach(p=>{
-          s+=`${p.marker}${p.seriesName}：<b>${METRIC==='ratio'?pct(p.value):yi(p.value)+D.unit}</b><br/>`;});
+          const prev=prevNonNull(D.inds[p.seriesName]||[],p.dataIndex);
+          const dv=METRIC==='ratio'?deltaSpan(p.value,prev,v=>v.toFixed(2)+'pt',false)
+                                   :deltaSpan(p.value,prev,v=>yi(v)+D.unit,true);
+          s+=`${p.marker}${p.seriesName}：<b>${METRIC==='ratio'?pct(p.value):yi(p.value)+D.unit}</b>${dv}<br/>`;});
         return s;}},
     xAxis:{type:'category',data:D.x,boundaryGap:false,axisLabel:{fontSize:11}},
     yAxis:{type:'value',scale:METRIC!=='share',
@@ -156,18 +159,25 @@ function renderTable(D,order,colorFor){
     const f=sums[0],l=sums[sums.length-1];
     let chg='—'; if(f!=null&&l!=null&&f){const d=(l-f)/f*100;chg=`<span class="${d>0?'pos':(d<0?'neg':'')}">${d>0?'+':''}${d.toFixed(1)}%</span>`;}
     tb.innerHTML+=`<tr class="total-row"><td class="ta-l"><b>合计（全部行业）</b></td>`+
-      sums.map(v=>`<td><b>${v==null?'—':yi(v)}</b></td>`).join('')+`<td><b>${chg}</b></td></tr>`;
+      sums.map((v,k)=>v==null?'<td>—</td>':`<td><b>${yi(v)}</b>${(dv=>dv?'<br>'+dv:'')(deltaSpan(v,prevNonNull(sums,k),yi,true))}</td>`).join('')+
+      `<td><b>${chg}</b></td></tr>`;
   }
+  const isR=METRIC==='ratio';
   order.forEach(ind=>{
     const vals=D.inds[ind];
     const first=vals[cols[0]], last=vals[cols[cols.length-1]];
     let chg='—';
     if(first!=null&&last!=null){
-      if(METRIC==='ratio'){const d=last-first;chg=`<span class="${d>0?'pos':(d<0?'neg':'')}">${d>0?'+':''}${d.toFixed(2)}pt</span>`;}
+      if(isR){const d=last-first;chg=`<span class="${d>0?'pos':(d<0?'neg':'')}">${d>0?'+':''}${d.toFixed(2)}pt</span>`;}
       else{const d=first?(last-first)/first*100:null; chg=d==null?'—':`<span class="${d>0?'pos':(d<0?'neg':'')}">${d>0?'+':''}${d.toFixed(1)}%</span>`;}
     }
     tb.innerHTML+=`<tr><td class="ta-l"><span class="ind-name"><span class="dot" style="background:${colorFor[ind]}"></span>${ind}</span></td>`+
-      cols.map(i=>`<td>${vals[i]==null?'—':(METRIC==='ratio'?pct(vals[i]):yi(vals[i]))}</td>`).join('')+
+      cols.map(i=>{
+        if(vals[i]==null) return '<td>—</td>';
+        const val=isR?pct(vals[i]):yi(vals[i]);
+        const dv=isR?deltaSpan(vals[i],prevNonNull(vals,i),v=>v.toFixed(2)+'pt',false)
+                    :deltaSpan(vals[i],prevNonNull(vals,i),yi,true);
+        return `<td>${val}${dv?'<br>'+dv:''}</td>`;}).join('')+
       `<td>${chg}</td></tr>`;
   });
   document.getElementById('table-hint').textContent=

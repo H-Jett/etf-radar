@@ -26,6 +26,18 @@ const LS = {
   set zoom(v){ try{ localStorage.setItem('etf.zoom',JSON.stringify(v)); }catch(e){} },
 };
 
+// 环比变化：相对"上一个时间点"的变化。涨红(pos)跌绿(neg)，与 A 股习惯一致。
+// arr 为该序列按时间的值数组；i 为当前索引；上一个时间点取最近的非空值。
+function prevNonNull(arr,i){ for(let k=i-1;k>=0;k--) if(arr[k]!=null) return arr[k]; return null; }
+// 返回一段带颜色的 " (+Δ +x%)"；fmt 格式化 Δ 的绝对值；withPct 控制是否附百分比。
+function deltaSpan(cur,prev,fmt,withPct){
+  if(cur==null||prev==null) return '';
+  const d=cur-prev, cls=d>0?'pos':(d<0?'neg':''), sign=d>0?'+':'';
+  let s=sign+fmt(d);   // fmt(d) 对负值自带负号
+  if(withPct!==false && prev) s+=' '+sign+(d/prev*100).toFixed(1)+'%';
+  return ` <span class="${cls}" style="font-size:.85em;font-weight:600">(${s})</span>`;
+}
+
 // 日/周/月 分桶键(按日期本地零点解析,与时区无关地反映该日历日的 ISO 周)
 function bucketKey(d,p){
   if(p==='M') return d.slice(0,7);

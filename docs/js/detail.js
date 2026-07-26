@@ -106,6 +106,7 @@ function renderChart(){
      lineStyle:{width:1.5,color:colorAt(i)},
      itemStyle:{color:colorAt(i)},data:pick(e.shares)})),
   ];
+  const dataOf={}; series.forEach(se=>dataOf[se.name]=se.data);   // 供 tooltip 取上一时间点
   const z=LS.zoom;   // 恢复用户上次拖动的时间段（跨行业/页面一致）
   const zStart=z?z.start:(labels.length>90?Math.round((1-90/labels.length)*100):0);
   const zEnd=z?z.end:100;
@@ -115,9 +116,10 @@ function renderChart(){
     grid:{left:58,right:20,top:44,bottom:52},
     legend:{type:'scroll',top:4,data:names,selected:LEGEND_SEL,textStyle:{fontSize:11}},
     tooltip:{trigger:'axis',
-      formatter:ps=>{let s=ps[0].axisValue+'<br/>';
+      formatter:ps=>{let s=ps[0].axisValue+' <span style="color:#888;font-size:11px">（较上一时间点）</span><br/>';
         ps.filter(p=>p.value!=null).sort((a,b)=>b.value-a.value).slice(0,15).forEach(p=>{
-          s+=`${p.marker}${p.seriesName}：<b>${p.value.toFixed(2)}亿份</b><br/>`;});return s;}},
+          const dv=deltaSpan(p.value,prevNonNull(dataOf[p.seriesName]||[],p.dataIndex),v=>v.toFixed(2)+'亿份',true);
+          s+=`${p.marker}${p.seriesName}：<b>${p.value.toFixed(2)}亿份</b>${dv}<br/>`;});return s;}},
     xAxis:{type:'category',data:labels,boundaryGap:false,axisLabel:{fontSize:11}},
     yAxis:{type:'value',name:'份额(亿)',scale:false,splitLine:{lineStyle:{color:'#eef1f6'}},
       axisLabel:{fontSize:11}},

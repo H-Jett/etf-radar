@@ -85,10 +85,51 @@ def fetch_sse_shares_latest(max_lookback: int = 12):
 _RE_U = re.compile(r"<u>(.*?)</u>")
 
 
+_SZSE_SESSION = None
+_SZSE_RETRIES = 5
+
+
+def _szse_session():
+    """深交所对境外/非浏览器 IP 有反爬(偶发 Connection reset)。先访问列表页拿 cookie，
+    复用同一 Session，显著降低被重置概率。"""
+    global _SZSE_SESSION
+    if _SZSE_SESSION is None:
+        s = requests.Session()
+        s.headers.update(_SZSE_HEADERS)
+        try:
+            s.get("https://www.szse.cn/market/product/list/etfList/index.html",
+                  timeout=REQUEST_TIMEOUT)
+        except Exception:  # noqa
+            pass
+        _SZSE_SESSION = s
+    return _SZSE_SESSION
+
+
+def _szse_get_json(url, params, tag):
+    """带重试的深交所 GET(用会话 cookie)。多次失败返回 None(而非直接放弃整个流程)。"""
+    sess = _szse_session()
+    for attempt in range(1, _SZSE_RETRIES + 1):
+        try:
+            r = sess.get(url, params=params, timeout=REQUEST_TIMEOUT)
+            return r.json()
+        except Exception as e:  # noqa
+            if attempt == _SZSE_RETRIES:
+                log.warning("深交所 %s 第 %d 次仍失败：%s", tag, attempt, e)
+            else:
+                time.sleep(0.8 * attempt)
+            # 连续失败时重置会话(重新拿 cookie)
+            if attempt == 2:
+                global _SZSE_SESSION
+                _SZSE_SESSION = None
+                sess = _szse_session()
+    return None
+
+
 def fetch_szse_list() -> dict:
     """
     抓取深交所全部 ETF。返回 {code: {"name","index_name","share"}}。
     share 由「当前规模」(万份) 估算 -> 份；深交所无逐日份额接口，仅取当前规模。
+    带会话 cookie + 重试；深交所整体失败时回退东方财富(EM)兜底。
     """
     out = {}
     page = 1
@@ -96,13 +137,13 @@ def fetch_szse_list() -> dict:
     while True:
         params = {"SHOWTYPE": "JSON", "CATALOGID": "1945", "TABKEY": "tab1",
                   "PAGENO": str(page), "random": "0.123"}
-        try:
-            r = requests.get(SZSE_LIST_URL, headers=_SZSE_HEADERS, params=params,
-                             timeout=REQUEST_TIMEOUT)
-            blocks = r.json()
-        except Exception as e:  # noqa
-            log.warning("深交所列表第 %d 页失败：%s", page, e)
-            break
+        blocks = _szse_get_json(SZSE_LIST_URL, params, "列表第 %d 页" % page)
+        if blocks is None:
+            # 本页多次重试仍失败：跳过该页继续(而非整体放弃)
+            if page >= (total_pages or 1):
+                break
+            page += 1
+            continue
         if not blocks:
             break
         blk = blocks[0]
@@ -129,6 +170,53 @@ def fetch_szse_list() -> dict:
             break
         page += 1
         time.sleep(0.1)
+    if not out:
+        # 深交所整体不可达(境外 IP 反爬) → 东方财富兜底，保证深市 ETF 不缺失
+        log.warning("深交所列表为空，回退东方财富(EM)兜底深市 ETF")
+        out = _fetch_szse_list_em()
+    return out
+
+
+# EM 兜底：全市场 ETF 里按代码(深市 ETF/LOF 以 15/16/18 开头)筛深市。
+# share 由 规模(f20,元) / 净值(f2) 估算 → 份；净值按 f1 小数位还原。
+_EM_CLIST_URL = "https://push2.eastmoney.com/api/qt/clist/get"
+_EM_CLIST_HEADERS = {"User-Agent": UA, "Referer": "https://quote.eastmoney.com/"}
+_EM_ETF_FS = "b:MK0021,b:MK0022,b:MK0024,b:MK0827"
+
+
+def _fetch_szse_list_em() -> dict:
+    out = {}
+    for pn in range(1, 20):
+        j = None
+        for attempt in range(1, MAX_RETRIES + 1):
+            try:
+                r = requests.get(_EM_CLIST_URL, headers=_EM_CLIST_HEADERS, timeout=REQUEST_TIMEOUT,
+                                 params={"pn": str(pn), "pz": "100", "po": "1", "fid": "f12",
+                                         "fs": _EM_ETF_FS, "fields": "f1,f2,f12,f13,f14,f20"})
+                j = r.json()
+                break
+            except Exception:  # noqa
+                time.sleep(0.8 * attempt)
+        diff = ((j or {}).get("data") or {}).get("diff") or []
+        if isinstance(diff, dict):
+            diff = list(diff.values())
+        if not diff:
+            break
+        for x in diff:
+            code = str(x.get("f12") or "").strip()
+            if not code.startswith(("15", "16", "18")):  # 深市 ETF/LOF
+                continue
+            f2, f1, f20 = x.get("f2"), x.get("f1"), x.get("f20")
+            share = 0.0
+            try:
+                nav = float(f2) / (10 ** int(f1 if f1 is not None else 3))  # 还原净值
+                if nav > 0 and f20:
+                    share = float(f20) / nav
+            except (TypeError, ValueError, ZeroDivisionError):
+                share = 0.0
+            out[code] = {"name": (x.get("f14") or "").strip(), "index_name": "", "share": share}
+        time.sleep(0.15)
+    log.info("EM 兜底深市 ETF：%d 只", len(out))
     return out
 
 
@@ -151,12 +239,15 @@ def fetch_szse_shares_history(code, start, end):
     while True:
         params = {"SHOWTYPE": "JSON", "CATALOGID": "fund_jjgm", "TABKEY": "tab1",
                   "txtDm": code, "txtStart": start, "txtEnd": end, "PAGENO": str(page)}
-        try:
-            r = requests.get(_SZSE_FUND_URL, params=params,
-                             headers=_SZSE_FUND_HEADERS, timeout=REQUEST_TIMEOUT)
-            blocks = r.json()
-        except Exception:  # noqa
-            break
+        blocks = None
+        for attempt in range(1, MAX_RETRIES + 1):  # 偶发 reset 重试，勿一次异常即放弃
+            try:
+                r = requests.get(_SZSE_FUND_URL, params=params,
+                                 headers=_SZSE_FUND_HEADERS, timeout=REQUEST_TIMEOUT)
+                blocks = r.json()
+                break
+            except Exception:  # noqa
+                time.sleep(0.6 * attempt)
         if not blocks:
             break
         blk = blocks[0]

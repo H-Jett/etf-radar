@@ -76,10 +76,13 @@ function renderChart(){
     ...members.map((s,i)=>({name:`${s.name}(${s.code})`,type:'line',smooth:false,showSymbol:true,symbolSize:4,connectNulls:true,
      lineStyle:{width:1.5,color:colorAt(i)},itemStyle:{color:colorAt(i)},data:CUR.series[s.code]})),
   ];
+  const dataOf={}; series.forEach(se=>dataOf[se.name]=se.data);   // 供 tooltip 取上一时间点
   CHART.setOption({animationDuration:400,grid:{left:58,right:20,top:40,bottom:36},
     legend:{type:'scroll',top:4,data:names,selected:LEGEND,textStyle:{fontSize:11}},
-    tooltip:{trigger:'axis',formatter:ps=>{let s=ps[0].axisValue+'<br/>';
-      ps.filter(p=>p.value!=null).sort((a,b)=>b.value-a.value).slice(0,15).forEach(p=>{s+=`${p.marker}${p.seriesName}：<b>${yi(p.value)}元</b><br/>`;});return s;}},
+    tooltip:{trigger:'axis',formatter:ps=>{let s=ps[0].axisValue+' <span style="color:#888;font-size:11px">（较上一时间点）</span><br/>';
+      ps.filter(p=>p.value!=null).sort((a,b)=>b.value-a.value).slice(0,15).forEach(p=>{
+        const dv=deltaSpan(p.value,prevNonNull(dataOf[p.seriesName]||[],p.dataIndex),v=>yi(v)+'元',true);
+        s+=`${p.marker}${p.seriesName}：<b>${yi(p.value)}元</b>${dv}<br/>`;});return s;}},
     xAxis:{type:'category',data:PERIODS,boundaryGap:false,axisLabel:{fontSize:11}},
     yAxis:{type:'value',name:'持股市值',scale:false,axisLabel:{fontSize:11,formatter:v=>yi(v)},splitLine:{lineStyle:{color:'#eef1f6'}}},
     series},true);
