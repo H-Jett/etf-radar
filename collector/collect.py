@@ -938,8 +938,16 @@ def run_daily(no_report_check=False):
                 % trade_date)
         write_status(trade_date, old_meta=old_meta)
         return False
-    if old_meta.get("trade_date") == trade_date and RUN is not None:
-        RUN["stats"]["no_new_trading_day"] = True  # 非交易日/份额未更新（正常）
+    if old_meta.get("trade_date") == trade_date:
+        # 行情日未变（非交易日，或当日已被前一次运行更新过）→ 无新增数据。
+        # 直接短路：不重复抓收盘价(避免东财限流"整体不可用"误报 warning)，状态标记"数据已最新"(ok)。
+        log.info("行情日 %s 已是最新、无新增 → 跳过重算，状态置为「数据已最新」", trade_date)
+        if RUN is not None:
+            RUN["stats"]["no_new_trading_day"] = True
+            RUN["stats"]["already_latest"] = True
+        write_status(trade_date, num_nt_etfs=(old_meta or {}).get("num_nt_etfs"),
+                     num_industries=(old_meta or {}).get("num_industries"), old_meta=old_meta)
+        return True
     etf_map = {r["code"]: r for r in old_etfs}
     for code, r in etf_map.items():
         if code in master:

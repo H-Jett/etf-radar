@@ -54,14 +54,16 @@ function renderStatus(s){
   const el=document.getElementById('run-status');
   if(!el||!s||!s.latest) return;
   const L=s.latest;
+  const st=L.stats||{};
   const MAP={ok:['✅','当天采集正常','ok'],warning:['⚠️','采集有警告','warn'],error:['❌','采集异常','err']};
-  const [icon,label,cls]=MAP[L.status]||MAP.ok;
+  let [icon,label,cls]=MAP[L.status]||MAP.ok;
+  // 行情日未变(非交易日 / 当日已更新过)时以"数据已是最新"为主，避免被冗余运行的次要 warning(如收盘价接口偶发限流)带偏成"未更新"
+  if(L.status!=='error' && (st.already_latest||st.no_new_trading_day)){ icon='✅'; label='数据已是最新'; cls='ok'; }
   const dots=(s.recent||[]).slice(0,16).map(r=>{
     const c=(MAP[r.status]||MAP.ok)[2];
     return `<i class="rs-dot ${c}" title="${r.run_at} · ${(MAP[r.status]||MAP.ok)[1]} · ${r.mode==='init'?'初始化':'每日'}"></i>`;
   }).join('');
   // 展开详情:关键指标 + 完整警告/错误 + 最近运行记录(供针对性排查)
-  const st=L.stats||{};
   const facts=[
     `模式 ${L.mode==='init'?'初始化(全量)':'每日增量'}`,
     L.num_nt_etfs!=null?`国家队 ETF ${L.num_nt_etfs} 只`:'',
@@ -70,7 +72,7 @@ function renderStatus(s){
     st.share_days_added!=null?`份额新增 ${st.share_days_added} 天`:'',
     st.sse_etfs!=null?`沪深接口 ${st.sse_etfs}/${st.szse_etfs}`:'',
     L.report_rescan?'本次重扫持有人':'',
-    st.no_new_trading_day?'非交易日·份额未变':'',
+    (st.already_latest||st.no_new_trading_day)?'当日无新增(数据已最新)':'',
     L.duration_sec!=null?`用时 ${L.duration_sec}s`:'',
   ].filter(Boolean);
   const msgs=[...(L.errors||[]).map(m=>`<li class="err">✕ ${m}</li>`),
@@ -86,7 +88,7 @@ function renderStatus(s){
     `<div class="rs-head" id="rs-toggle">
        <span class="rs-icon">${icon}</span>
        <span class="rs-label">${label}</span>
-       <span class="rs-time">最近采集 ${L.run_at} · 行情日 ${L.trade_date||'—'}</span>
+       <span class="rs-time">数据已更新至 <b>行情日 ${L.trade_date||'—'}</b> · 最近采集 ${L.run_at}</span>
        <span class="rs-dots" title="最近 ${(s.recent||[]).length} 次采集">${dots}</span>
        <span class="rs-more">详情 ▾</span>
      </div>
