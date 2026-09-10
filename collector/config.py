@@ -98,6 +98,13 @@ SHARE_BACKFILL_WORKERS = 8   # 份额历史并发（对上交所温和一些）
 HOLDER_HISTORY_MAX_PERIODS = 0   # 历史报告期上限，0=尽可能全
 MAX_RETRIES = 3
 
+# 单次运行的总时间预算（秒）。数据源半死不活时(每请求 20s 超时 × 重试 × 上千请求)
+# 总耗时会失控，撞上 CI 的 job 硬超时被杀 → 步骤失败、状态也来不及落盘。
+# 超预算的采集阶段带 warning 提前收工，已取到的数据照常写盘，下次运行幂等补齐。
+# 0 或负数 = 不限时（本地手动跑、init.py --deep-history 等场景）。
+# GitHub Actions 里由 workflow 用环境变量显式指定，与 timeout-minutes 配套。
+RUN_BUDGET_SEC = int(os.environ.get("RUN_BUDGET_SEC", 18 * 60))
+
 # 初始化默认起始日（init.py 可用 --start 覆盖）。份额与收盘价都从此日回补。
 DEFAULT_START_DATE = "2016-01-01"
 

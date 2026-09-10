@@ -12,6 +12,8 @@
       分片合并已存，绝不重复或弄乱历史（相同内容不会产生新提交）。
     - 保护：若拉不到全市场基础数据或未发现国家队 ETF，直接终止且**不写盘**，
       不会破坏既有数据。
+    - 限时：受 config.RUN_BUDGET_SEC 时间预算约束；全市场重扫没跑完就整轮放弃
+      （不写盘，避免 universe 写残）。--deep-history 是一次性人工操作，不限时。
     - 退出码：成功 0 / 逻辑失败 1 / 参数错误 2 / 中断 130。
 """
 import os
@@ -52,8 +54,13 @@ def main():
             sys.exit(2)
 
     try:
+        collect.start_budget()
         ok = collect.run_init(start_date=args.start,
                               no_holder_history=args.no_holder_history)
+        if ok == collect.SKIP:
+            # 手动触发的全量：源不可达/没跑完是要知道的，照常以失败退出
+            log.error("数据源不可达或全量重扫未跑完（不写盘）→ 请稍后重试")
+            sys.exit(1)
         sys.exit(0 if ok else 1)
     except KeyboardInterrupt:
         log.warning("用户中断")
