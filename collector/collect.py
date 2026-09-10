@@ -19,6 +19,7 @@ import json
 import time
 import random
 import logging
+from collections import Counter
 from datetime import datetime, date, timedelta, timezone
 from concurrent.futures import (ThreadPoolExecutor, as_completed,
                                 TimeoutError as FutTimeout)
@@ -452,27 +453,31 @@ def collect_nt_etfs(candidates, master):
 # 4. 价格采集（回填 close / nt_value，并写时间序列）
 # ==================================================================
 def collect_prices(etfs, beg="0", cap_date=None):
-    """采集收盘价序列（东方财富全历史，与份额同期）。beg='YYYYMMDD' 或 '0'。
+    """采集收盘价序列（东财为主源、新浪兜底，与份额同期）。beg='YYYYMMDD' 或 '0'。
     cap_date='YYYY-MM-DD' 时，只保留 ≤ 该日的收盘价（与份额日对齐，不记录更新的一天）。"""
-    log.info("采集 %d 只 ETF 收盘价（东财，beg=%s，截至 %s）...", len(etfs), beg, cap_date or "最新")
+    log.info("采集 %d 只 ETF 收盘价（东财为主 + 新浪兜底=%s，beg=%s，截至 %s）...",
+             len(etfs), C.PRICE_FALLBACK_SINA, beg, cap_date or "最新")
 
     def one(rec):
-        series = S.fetch_kline_em(rec["code"], rec["exchange"], beg=beg)
+        series, src = S.fetch_close_series(rec["code"], rec["exchange"], beg=beg)
         if cap_date:
             series = [p for p in series if p[0] <= cap_date]   # 对齐份额日
         time.sleep(random.uniform(0, C.SCAN_DELAY))
         if not series:
-            return rec["code"], None, []
-        return rec["code"], series[-1][1], series
+            return rec["code"], None, [], ""
+        return rec["code"], series[-1][1], series, src
 
     price_series = {}
+    src_count = Counter()
     with ThreadPoolExecutor(max_workers=C.PRICE_WORKERS) as ex:
         futs = {ex.submit(one, r): r for r in etfs}
         for done, total, fut in drain_futures(futs, "收盘价采集"):
-            code, close, series = fut.result()
+            code, close, series, src = fut.result()
             price_series[code] = series
+            src_count[src] += 1
             if done % 30 == 0 or done == total:
-                log.info("  价格进度 %d/%d", done, total)
+                log.info("  价格进度 %d/%d（东财 %d / 新浪兜底 %d）",
+                         done, total, src_count["em"], src_count["sina"])
 
     missing = []
     for rec in etfs:
@@ -488,12 +493,21 @@ def collect_prices(etfs, beg="0", cap_date=None):
     if RUN is not None:
         RUN["stats"]["price_ok"] = len(etfs) - len(missing)
         RUN["stats"]["price_total"] = len(etfs)
-    # 部分未取到 = 收盘价接口抖动，数据仍写入(有历史兜底)，不算异常；
-    # 只有“全部取不到”才判为警告(收盘价源可能整体不可用)。
+        if src_count["sina"]:
+            RUN["stats"]["price_from_sina"] = src_count["sina"]
+    # 部分未取到 = 接口抖动，数据仍写入(有历史兜底)，不算异常；
+    # 只有“两个源都全军覆没”才判为警告。
     if missing and len(missing) == len(etfs):
-        run_warn("收盘价接口整体不可用：%d 只 ETF 全部未取到" % len(missing))
+        run_warn("收盘价东财与新浪双源均不可用：%d 只 ETF 全部未取到" % len(missing))
     elif missing:
         log.info("  %d 只 ETF 本次未取到收盘价(接口抖动，用历史值)", len(missing))
+    # 兜底生效要看得见：大面积走兜底说明东财这段时间封了(值得知道)，
+    # 零星几只只是个别代码抖动，记 info 就够，别把状态页刷成一片黄。
+    if src_count["sina"] >= max(5, len(etfs) // 10):
+        run_warn("收盘价主源(东财)不可用，%d/%d 只 ETF 走新浪兜底取回（数据完整）"
+                 % (src_count["sina"], len(etfs)))
+    elif src_count["sina"]:
+        log.info("  %d 只 ETF 走新浪兜底取回收盘价", src_count["sina"])
     return price_series
 
 
@@ -973,7 +987,6 @@ def newer_report_available(universe, known_report_date):
     """抽查若干国家队 ETF 的最新报告期，若出现比已知更新的报告期则返回 True。"""
     if not known_report_date:
         return True
-    from collections import Counter
     sample = [u["code"] for u in universe[:20]]
     log.info("检测半年报/年报是否发布：抽查 %d 只 ETF 的最新报告期 ...", len(sample))
     latest_dates = []
@@ -1075,7 +1088,6 @@ def run_daily(no_report_check=False):
 
 def _write_all(trade_date, etfs, industries, price_series, share_hist,
                holder_periods=None):
-    from collections import Counter
     etfs.sort(key=lambda x: -(x["nt_value"] or x["nt_amount"]))
 
     # 分片写逐 ETF 序列（合并已存 + 本轮），收盘价对齐到份额日 trade_date

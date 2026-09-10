@@ -7,6 +7,10 @@
   - 深交所 ETF 列表（含拟合指数、规模）  SZSE ShowReport
   - 新浪财经 十大持有人 + 报告期列表     Sina CaihuiFundInfoService
   - 新浪财经 日 K 线（价格/成交量）      Sina getKLineData
+  - 东方财富 日 K（收盘价全历史，主源）  EM push2his
+
+收盘价统一走 fetch_close_series()：东财为主源，取不到时转新浪兜底（两者收盘价
+口径一致，均不复权）。东财会按 IP 封禁，单源不够用。
 """
 import re
 import json
@@ -22,7 +26,7 @@ import urllib3
 
 from config import (
     SSE_SHARE_URL, SZSE_LIST_URL, SINA_HOLDER_PAGE, SINA_HOLDER_API,
-    SINA_KLINE_URL, UA, REQUEST_TIMEOUT, MAX_RETRIES,
+    SINA_KLINE_URL, UA, REQUEST_TIMEOUT, MAX_RETRIES, PRICE_FALLBACK_SINA,
 )
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -478,9 +482,10 @@ def fetch_holders(code: str, report_date: str):
 _RE_KDATA = re.compile(r"var\s+_data\s*=\s*\((\[.*?\])\)", re.DOTALL)
 
 
-def fetch_kline(code: str, datalen: int = 120):
-    """返回 [{"day","open","high","low","close","volume"}...]（旧->新）。"""
-    prefix = exchange_prefix(code)
+def fetch_kline(code: str, datalen: int = 120, exchange: str = None):
+    """返回 [{"day","open","high","low","close","volume"}...]（旧->新）。
+    exchange 传 'sh'/'sz' 时按它取前缀，否则按代码推断。"""
+    prefix = exchange if exchange in ("sh", "sz") else exchange_prefix(code)
     url = SINA_KLINE_URL.format(prefix=prefix, code=code, datalen=datalen)
     try:
         r = requests.get(url, headers=_SINA_HEADERS, timeout=REQUEST_TIMEOUT)
@@ -555,6 +560,60 @@ def fetch_kline_em(code: str, exchange: str, beg: str = "0"):
         time.sleep(1.2 * attempt + 0.3)
     log.warning("东财 K 线多次重试(含 curl)仍失败：%s", secid)
     return []
+
+
+# ==================================================================
+# 收盘价：东财为主源，新浪兜底
+# ------------------------------------------------------------------
+# 东财(push2his)会按 IP 封禁——密集请求后变成 TLS 握手完直接断连(http=000)，
+# 且一封就是整段时间、整批 ETF 全取不到（2026-09-10 GitHub runner 与本机同时中招，
+# 那天 CI 的 price_ok=0/52）。新浪 K 线的收盘价与东财逐位一致（都是不复权，实测
+# 10 只 × 3 天全同），可作等价兜底；唯一限制是单次最多约千个交易日，补不了更早
+# 的历史（够日更用；全量 init 时只能给近千日，但写盘是按日期合并的，历史不会丢）。
+# ==================================================================
+_SINA_KLINE_MAX = 1023            # 新浪 datalen 上限（实测 1000 可用）
+
+
+def fetch_kline_sina_closes(code: str, exchange: str, beg: str = "0"):
+    """新浪日 K → [[date, close]...]（旧->新），东财收盘价的兜底源。"""
+    need = _SINA_KLINE_MAX
+    if beg and beg != "0":
+        try:
+            days = (datetime.now(_CN_TZ).date()
+                    - datetime.strptime(beg, "%Y%m%d").date()).days
+            # 自然日 → 交易日约 5/7，宽放一点，最少取 30 个
+            need = min(_SINA_KLINE_MAX, max(30, int(days * 0.75) + 10))
+        except ValueError:
+            pass
+    rows = fetch_kline(code, datalen=need, exchange=exchange)
+    out = []
+    for r in rows:
+        day = str(r.get("day", ""))[:10]
+        try:
+            close = float(r["close"])
+        except (KeyError, TypeError, ValueError):
+            continue
+        if day:
+            out.append([day, close])
+    out.sort(key=lambda x: x[0])
+    return out
+
+
+def fetch_close_series(code: str, exchange: str, beg: str = "0"):
+    """收盘价序列，返回 (series, src)：src 为 'em' / 'sina' / ''(两源都没拿到)。
+
+    东财明确返回空列表(rc 正常但无 K 线，如新上市/已摘牌)与"取不到"无法区分，
+    故只要东财给不出数据就试一次新浪；新浪也空才算真没有。
+    """
+    series = fetch_kline_em(code, exchange, beg=beg)
+    if series or not PRICE_FALLBACK_SINA:
+        return (series, "em") if series else ([], "")
+    alt = fetch_kline_sina_closes(code, exchange, beg=beg)
+    if alt:
+        log.info("收盘价转新浪兜底：%s 取到 %d 点（%s→%s）",
+                 code, len(alt), alt[0][0], alt[-1][0])
+        return alt, "sina"
+    return [], ""
 
 
 # ==================================================================
