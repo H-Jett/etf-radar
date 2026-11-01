@@ -1,0 +1,1 @@
+[{"run_at":"2026-11-01 15:42:11","mode":"daily","status":"ok","trade_date":"2026-10-30","is_new_trading_day":false,"num_nt_etfs":52,"num_industries":19,"report_rescan":false,"duration_sec":32.8,"warnings":[],"errors":[],"stats":{"sse_etfs":923,"szse_etfs":768,"trade_date":"2026-10-30","no_new_trading_day":true,"already_latest":true}}]
